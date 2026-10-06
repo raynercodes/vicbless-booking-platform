@@ -76,3 +76,10 @@ export const DAYS_AHEAD = 14
 
 // The branded call to action. Used on every booking button.
 export const CTA_TEXT = 'Book here to get blessed'
+
+// The photo section under the video: headline, paragraph, and the words stacked over the photo.
+export const STATEMENT = {
+  headline: "EVERY CUT ISN'T JUST A CUT. IT'S A BLESSING.",
+  body: 'Consistent precision cuts with clean detail and a personalized cut experience to give you confidence and blessings.',
+  words: ['Quality', 'Detail', 'Consistency', 'Baxley, GA'],
+}

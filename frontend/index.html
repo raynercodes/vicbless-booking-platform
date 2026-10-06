@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0A0612" />
+    <script>
+      // Applies the saved theme and motion choice before the page paints, so there is no flash.
+      // Keep in step with src/lib/settings.js.
+      try {
+        var saved = JSON.parse(localStorage.getItem('vicbless.settings') || '{}')
+        var root = document.documentElement
+        var osReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        root.dataset.theme = saved.theme === 'light' ? 'light' : 'dark'
+        root.dataset.motion = saved.motion === 'on' || saved.motion === 'off' ? saved.motion : osReduce ? 'off' : 'on'
+      } catch (e) {}
+    </script>
     <title>Vicbless Barbershop</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -2,21 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import SiteHeader from '../components/SiteHeader.jsx'
 import SiteFooter from '../components/SiteFooter.jsx'
 import ShopInfo from '../components/ShopInfo.jsx'
+import Statement from '../components/Statement.jsx'
+import { useSettings } from '../lib/useSettings.js'
 import Socials from '../components/Socials.jsx'
 import { CTA_TEXT } from '../config.js'
-
-function usePrefersReducedMotion() {
-  const [reduce, setReduce] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  )
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const onChange = () => setReduce(mq.matches)
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
-  }, [])
-  return reduce
-}
 
 const PlayIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
@@ -35,7 +24,7 @@ const PauseIcon = () => (
 const PAN_DISTANCE = 0.85
 
 export default function Home() {
-  const reduceMotion = usePrefersReducedMotion()
+  const reduceMotion = useSettings().motion === 'off'
   const heroRef = useRef(null)
   const videoRef = useRef(null)
   const [playing, setPlaying] = useState(false)
@@ -83,7 +72,7 @@ export default function Home() {
   }, [])
 
   // Pan: as the page scrolls, the footage slides from its top to its bottom
-  // (--pan goes 0 to 1 over the first 85% of the hero's height of scrolling). Skipped for reduced motion.
+  // (--pan goes 0 to 1 over the first 85% of the hero's height of scrolling). Skipped when Motion is off.
   useEffect(() => {
     if (reduceMotion) return undefined
     const hero = heroRef.current
@@ -155,6 +144,8 @@ export default function Home() {
             {playing ? <PauseIcon /> : <PlayIcon />}
           </button>
         </section>
+
+        <Statement />
 
         <ShopInfo />
       </main>

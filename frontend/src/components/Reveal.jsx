@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import { getSettings } from '../lib/useSettings.js'
 
-// Fades and lifts its content in once it scrolls into view.
-// Shows immediately when the browser has no IntersectionObserver or the visitor
-// prefers reduced motion, so nothing is ever left hidden.
-export default function Reveal({ as: Tag = 'div', delay = 0, className = '', children, ...rest }) {
+// Fades and moves its content in once it scrolls into view.
+//   from="below" (default) lifts up into place, from="above" drops down into place.
+// Shows immediately when the browser has no IntersectionObserver or Motion is off in the
+// settings (which starts from the visitor's system setting), so nothing is left hidden.
+export default function Reveal({ as: Tag = 'div', from = 'below', delay = 0, className = '', children, ...rest }) {
   const ref = useRef(null)
   const [shown, setShown] = useState(
-    () =>
-      typeof window === 'undefined' ||
-      !('IntersectionObserver' in window) ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    () => typeof window === 'undefined' || !('IntersectionObserver' in window) || getSettings().motion === 'off',
   )
 
   useEffect(() => {
@@ -29,13 +28,12 @@ export default function Reveal({ as: Tag = 'div', delay = 0, className = '', chi
     return () => io.disconnect()
   }, [shown])
 
+  const classes = ['reveal', from === 'above' ? 'reveal-down' : '', shown ? 'in' : '', className]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <Tag
-      ref={ref}
-      className={`reveal${shown ? ' in' : ''}${className ? ` ${className}` : ''}`}
-      style={{ '--d': `${delay}ms` }}
-      {...rest}
-    >
+    <Tag ref={ref} className={classes} style={{ '--d': `${delay}ms` }} {...rest}>
       {children}
     </Tag>
   )

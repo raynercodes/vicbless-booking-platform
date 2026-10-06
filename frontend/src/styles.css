@@ -9,8 +9,27 @@
   --accent: #c084fc;
   --on-accent: #0a0612;
   --danger: #ff8aa0;
+  --header-bg: rgba(10, 6, 18, 0.92);
+  /* Text and accent that sit on top of photos and video. Always light, in either theme. */
+  --on-media: #f6efff;
+  --accent-media: #c084fc;
   --font: 'Archivo', 'Arial Narrow', system-ui, -apple-system, 'Segoe UI', sans-serif;
   color-scheme: dark;
+}
+
+/* Light theme. Switched with the Dark mode setting (see src/lib/settings.js). */
+html[data-theme='light'] {
+  --bg: #f8f4fd;
+  --surface: #ffffff;
+  --ink: #1b1030;
+  --muted: #5a4a73;
+  --line: #ddd0ee;
+  --purple: #7e22ce;
+  --accent: #7c3aed;
+  --on-accent: #ffffff;
+  --danger: #b3123b;
+  --header-bg: rgba(248, 244, 253, 0.92);
+  color-scheme: light;
 }
 
 *,
@@ -77,7 +96,7 @@ button {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: env(safe-area-inset-top, 0px) 16px 0;
-  background: rgba(10, 6, 18, 0.92);
+  background: var(--header-bg);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
@@ -231,14 +250,14 @@ button {
   width: 44px;
   height: 44px;
   padding: 0;
-  color: var(--ink);
+  color: var(--on-media);
   background: rgba(10, 6, 18, 0.6);
   border: 2px solid rgba(246, 239, 255, 0.7);
   border-radius: 50%;
 }
 
 .hero-toggle:hover {
-  border-color: var(--ink);
+  border-color: var(--on-media);
 }
 
 .info {
@@ -362,6 +381,14 @@ button {
   border-radius: 999px;
 }
 
+.hero-socials .social {
+  color: var(--on-media);
+}
+
+.hero-socials .social:hover {
+  color: var(--accent-media);
+}
+
 /* Scroll reveal: content below the video fades up as it enters the screen. */
 .reveal {
   opacity: 0;
@@ -375,19 +402,303 @@ button {
   transform: none;
 }
 
-/* Branded CTA on each haircut type. */
+/* Branded CTA on each haircut type: a purple box, matching the other booking buttons. */
 .svc-cta {
   display: inline-block;
-  margin-top: 6px;
-  padding: 8px 0;
-  font-weight: 700;
-  color: var(--accent);
+  margin-top: 12px;
+  padding: 12px 24px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--on-accent);
   text-decoration: none;
-  border-bottom: 2px solid transparent;
+  background: var(--accent);
+  border: 2px solid var(--accent);
+  border-radius: 8px;
 }
 
 .svc-cta:hover {
-  border-bottom-color: var(--accent);
+  filter: brightness(1.08);
+}
+
+/* Menu: three-line button on the left of the pinned bar, opens a panel under it. */
+.brand .site-menu {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.menu-toggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--ink);
+  background: none;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+}
+
+.menu-toggle:hover {
+  border-color: var(--accent);
+}
+
+/* The bar is the positioned parent, so the panel hangs just under it. */
+.menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 12px;
+  z-index: 20;
+  width: min(330px, calc(100vw - 24px));
+  max-height: calc(100vh - var(--brand-h) - 24px);
+  max-height: calc(100svh - var(--brand-h) - 24px);
+  padding: 8px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.menu-group + .menu-group {
+  margin-top: 4px;
+}
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-align: left;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+}
+
+.menu-head:hover {
+  background: var(--bg);
+}
+
+.menu-head .chev {
+  transition: transform 0.2s ease;
+}
+
+.menu-head[aria-expanded='true'] .chev {
+  transform: rotate(180deg);
+}
+
+.menu-sub {
+  padding: 2px 4px 8px;
+}
+
+.menu-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 12px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: 8px;
+}
+
+.menu-link:hover {
+  color: var(--accent);
+  background: var(--bg);
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+}
+
+.setting:hover {
+  background: var(--bg);
+}
+
+.setting-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.setting-label {
+  font-weight: 700;
+}
+
+.setting-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.switch-state {
+  min-width: 2em;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: right;
+  color: var(--muted);
+}
+
+.switch-track {
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 26px;
+  background: var(--line);
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--ink);
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+
+.setting[aria-checked='true'] .switch-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.setting[aria-checked='true'] .switch-track::after {
+  background: var(--on-accent);
+  transform: translateX(20px);
+}
+
+/* Words that drop down into place instead of lifting up. */
+.reveal-down {
+  transform: translateY(-28px);
+}
+
+/* Photo section under the video. The photo is 130% of the section's height and slides
+   through it with --pan (see Statement.jsx), so it has its own parallax. The headline sits
+   at the top and the stacked words at the bottom, which keeps the faces clear in the middle. */
+.statement {
+  position: relative;
+  color: var(--on-media);
+  display: flex;
+  min-height: 780px;
+  min-height: max(780px, 100svh);
+  padding: 56px 20px 48px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.statement-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 130%;
+  object-fit: cover;
+  object-position: 20% 50%;
+  transform: translate3d(0, calc(var(--pan, 0.5) * -23.1%), 0);
+  will-change: transform;
+}
+
+/* Darkens the top and bottom where the text sits, leaves the middle (the faces) clear. */
+.statement::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(10, 6, 18, 0.78) 0%,
+    rgba(10, 6, 18, 0.35) 28%,
+    rgba(10, 6, 18, 0) 45%,
+    rgba(10, 6, 18, 0) 55%,
+    rgba(10, 6, 18, 0.55) 72%,
+    rgba(10, 6, 18, 0.9) 100%
+  );
+}
+
+.statement-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.statement h2 {
+  max-width: 18ch;
+  margin: 0 0 14px;
+  font-size: clamp(1.5rem, 5.2vw, 2.6rem);
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  font-variation-settings: 'wdth' 85;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+}
+
+.statement p {
+  max-width: 44ch;
+  margin: 0;
+  font-size: clamp(1rem, 2.6vw, 1.2rem);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.7);
+}
+
+.statement-words {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.statement-words li {
+  font-size: clamp(2.7rem, 13vw, 6.8rem);
+  font-weight: 900;
+  line-height: 0.98;
+  letter-spacing: -0.01em;
+  font-variation-settings: 'wdth' 70;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+}
+
+.statement-words .statement-place {
+  color: var(--accent-media);
+}
+
+@media (min-width: 900px) {
+  .statement {
+    min-height: max(720px, 90svh);
+  }
+
+  /* On wide screens the words sit on the left, so shade the left side as well. */
+  .statement::after {
+    background: linear-gradient(90deg, rgba(10, 6, 18, 0.75) 0%, rgba(10, 6, 18, 0.4) 40%, rgba(10, 6, 18, 0) 70%),
+      linear-gradient(
+        to bottom,
+        rgba(10, 6, 18, 0.6) 0%,
+        rgba(10, 6, 18, 0) 30%,
+        rgba(10, 6, 18, 0) 60%,
+        rgba(10, 6, 18, 0.7) 100%
+      );
+  }
 }
 
 @media (max-width: 760px) {
@@ -403,16 +714,22 @@ button {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .hero .book-now {
-    animation: none;
-  }
+/* Motion off: the Motion setting (which starts from the visitor's system setting). */
+html[data-motion='off'] .hero .book-now {
+  animation: none;
+}
 
-  .reveal {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
+html[data-motion='off'] .reveal,
+html[data-motion='off'] .reveal-down {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+
+html[data-motion='off'] .chev,
+html[data-motion='off'] .switch-track,
+html[data-motion='off'] .switch-track::after {
+  transition: none;
 }
 
 /* ---------- Buttons ---------- */
@@ -793,8 +1110,6 @@ button {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
+html[data-motion='off'] {
+  scroll-behavior: auto;
 }

@@ -1,0 +1,827 @@
+#!/usr/bin/env bash
+# Vicbless: put the haircut-type CTAs ("Book here to get blessed") in a purple box.
+# Run from inside frontend/:  bash update-vicbless-service-cta-box.sh
+# Replaces src/styles.css with the full new version. If you edited it locally, tell me first.
+set -euo pipefail
+
+if [ ! -f package.json ] || ! grep -q vicbless-booking-platform package.json || [ ! -f src/styles.css ]; then
+  echo "Run this from inside the frontend/ folder."
+  exit 1
+fi
+
+cat > src/styles.css <<'VICBLESS_EOF'
+/* Vicbless: dark purple-black ground, light lavender ink, small purple accents. */
+:root {
+  --bg: #0a0612;
+  --surface: #130c21;
+  --ink: #f6efff;
+  --muted: #b3a5c9;
+  --line: #2f2347;
+  --purple: #a855f7;
+  --accent: #c084fc;
+  --on-accent: #0a0612;
+  --danger: #ff8aa0;
+  --font: 'Archivo', 'Arial Narrow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.5;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Home: pinned logo bar, video hero, shop info, footer ---------- */
+:root {
+  --brand-h: calc(84px + env(safe-area-inset-top, 0px));
+}
+
+/* Logo bar. Sticky, so it follows the page while scrolling. The logo sits in the
+   middle column and the social links on the right. */
+.brand {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: var(--brand-h);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: env(safe-area-inset-top, 0px) 16px 0;
+  background: rgba(10, 6, 18, 0.92);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.logo {
+  margin: 0;
+  width: min(100%, 880px);
+}
+
+.brand .logo {
+  grid-column: 2;
+  width: auto;
+  height: 60px;
+}
+
+.logo svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 0 3px var(--purple));
+}
+
+.brand .logo svg {
+  width: auto;
+  height: 100%;
+}
+
+.logo-link {
+  display: block;
+  height: 100%;
+  color: inherit;
+  border-radius: 6px;
+}
+
+.logo path {
+  fill: var(--ink);
+  stroke: var(--purple);
+  stroke-width: 6;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+
+.brand .socials {
+  grid-column: 3;
+  justify-self: end;
+}
+
+.socials {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.social {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--ink);
+  border-radius: 50%;
+}
+
+.social:hover {
+  color: var(--accent);
+}
+
+/* The hero fills whatever is left of the first screen under the pinned bar. */
+.hero {
+  position: relative;
+  height: calc(100vh - var(--brand-h));
+  height: calc(100svh - var(--brand-h));
+  min-height: 440px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* Blurred, dimmed poster fills the sides when the screen is wider than the video. */
+.hero-backdrop {
+  position: absolute;
+  top: -48px;
+  left: -48px;
+  width: calc(100% + 96px);
+  height: calc(100% + 96px);
+  object-fit: cover;
+  filter: blur(36px) brightness(0.5) saturate(1.2);
+}
+
+.hero-video {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  /* Much taller than the window (165%): --pan (0 to 1, set while scrolling) slides the
+     footage up through the extra 65% (that is 39.4% of the video's own height), so the
+     view travels from the top of the video to the bottom. */
+  transform: translate3d(-50%, calc(var(--pan, 0) * -39.4%), 0);
+  will-change: transform;
+  height: 165%;
+  width: auto;
+  max-width: 100%;
+  aspect-ratio: 720 / 1084;
+  object-fit: cover;
+  background: var(--surface);
+}
+
+/* Soft shade behind the button so it reads over any frame of the video. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 60% 40% at 50% 50%, rgba(10, 6, 18, 0.55), rgba(10, 6, 18, 0) 70%);
+}
+
+.hero-cta {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.hero .book-now {
+  pointer-events: auto;
+  max-width: min(88vw, 460px);
+  padding: 20px 44px;
+  font-size: clamp(1.15rem, 4.6vw, 1.5rem);
+  line-height: 1.15;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(192, 132, 252, 0.55);
+  animation: ring 2.8s ease-out infinite;
+}
+
+@keyframes ring {
+  0% {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(192, 132, 252, 0.55);
+  }
+  70%,
+  100% {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 0 22px rgba(192, 132, 252, 0);
+  }
+}
+
+.hero-toggle {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--ink);
+  background: rgba(10, 6, 18, 0.6);
+  border: 2px solid rgba(246, 239, 255, 0.7);
+  border-radius: 50%;
+}
+
+.hero-toggle:hover {
+  border-color: var(--ink);
+}
+
+.info {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 72px 20px 48px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 48px;
+}
+
+.info h2 {
+  margin: 0 0 14px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variation-settings: 'wdth' 85;
+}
+
+.menu,
+.hours {
+  margin: 0 0 32px;
+  padding: 0;
+  list-style: none;
+  border-top: 2px solid var(--ink);
+}
+
+.menu li {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.menu-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.menu-name {
+  font-weight: 700;
+}
+
+.menu-leader {
+  flex: 1;
+  min-width: 12px;
+  border-bottom: 2px dotted var(--line);
+  transform: translateY(-4px);
+}
+
+.menu-price {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.menu-meta {
+  margin: 2px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.hours li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.hours li span:last-child {
+  text-align: right;
+}
+
+.hours .closed {
+  color: var(--muted);
+}
+
+.info address {
+  font-style: normal;
+  color: var(--muted);
+}
+
+.info-cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 40px;
+}
+
+.site-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 20px calc(36px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.site-foot .copy {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Social links along the bottom of the video. */
+.hero-socials {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 2;
+  transform: translateX(-50%);
+}
+
+.hero-socials .socials {
+  padding: 2px 8px;
+  background: rgba(10, 6, 18, 0.6);
+  border: 1px solid rgba(246, 239, 255, 0.25);
+  border-radius: 999px;
+}
+
+/* Scroll reveal: content below the video fades up as it enters the screen. */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: var(--d, 0ms);
+}
+
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Branded CTA on each haircut type: a purple box, matching the other booking buttons. */
+.svc-cta {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 12px 24px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--on-accent);
+  text-decoration: none;
+  background: var(--accent);
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+}
+
+.svc-cta:hover {
+  filter: brightness(1.08);
+}
+
+@media (max-width: 760px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+}
+
+@media (max-width: 520px) {
+  .hero .book-now {
+    padding: 16px 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero .book-now {
+    animation: none;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-block;
+  padding: 13px 24px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn-primary:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+.book-now {
+  padding: 18px 64px;
+  border-radius: 999px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- Booking ---------- */
+.book {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 20px 72px;
+}
+
+.back {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 0;
+}
+
+.back:hover {
+  color: var(--ink);
+}
+
+.book-title {
+  margin: 0 0 20px;
+  font-size: clamp(2rem, 7vw, 2.8rem);
+  font-weight: 900;
+  line-height: 1.05;
+  font-variation-settings: 'wdth' 85;
+}
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.steps button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: none;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.steps button[aria-current='step'] {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.steps button.done {
+  color: var(--ink);
+}
+
+.steps button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.steps .n {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--line);
+  font-size: 0.8rem;
+}
+
+.steps [aria-current='step'] .n {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.panel {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  padding: 22px;
+}
+
+.panel h2 {
+  margin: 0 0 16px;
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+.opt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 14px;
+  text-align: left;
+  background: var(--bg);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+
+.opt:hover {
+  border-color: var(--accent);
+}
+
+.opt[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.opt .name {
+  font-weight: 700;
+}
+
+.opt .meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.opt .leader {
+  flex: 1;
+  min-width: 16px;
+  border-bottom: 2px dotted var(--line);
+  transform: translateY(-4px);
+}
+
+.opt .price {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.opt .note {
+  flex-basis: 100%;
+  margin-top: 2px;
+  font-size: 0.88rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.days {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 2px 2px 12px;
+  overflow-x: auto;
+}
+
+.day {
+  flex: none;
+  width: 72px;
+  padding: 10px 6px;
+  text-align: center;
+  line-height: 1.2;
+  background: var(--bg);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+
+.day .dow {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.day .dom {
+  display: block;
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+.day .tag {
+  display: block;
+  min-height: 1em;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.day[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+
+.day:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.times {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.time {
+  padding: 10px 6px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+
+.time:hover {
+  border-color: var(--accent);
+}
+
+.time[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.empty {
+  padding: 18px;
+  color: var(--muted);
+  border: 2px dashed var(--line);
+  border-radius: 8px;
+}
+
+.summary {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+
+.summary div + div {
+  margin-top: 10px;
+}
+
+.summary dt {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.summary dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  padding: 12px;
+  background: var(--bg);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: var(--accent);
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.hint {
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.err {
+  min-height: 1.3em;
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.notice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  font-weight: 600;
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  border-radius: 8px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.done {
+  padding-top: 24px;
+}
+
+.done p {
+  margin: 0 0 8px;
+}
+
+.code {
+  display: inline-block;
+  margin: 4px 0 16px !important;
+  padding: 6px 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+}
+
+.done .btn {
+  margin-top: 16px;
+}
+
+@media (max-width: 520px) {
+  .book-now {
+    padding: 16px 48px;
+  }
+  .panel {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+VICBLESS_EOF
+
+echo ""
+echo "styles.css updated. Running tests..."
+npm test
+echo ""
+echo "Next: npm run dev -- --host"
+echo ""
+echo "Git commands (not run for you):"
+echo "  git add src/styles.css"
+echo "  git commit -m \"Haircut CTAs in a purple box\""
+echo "  git push"
