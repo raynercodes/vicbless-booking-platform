@@ -342,6 +342,27 @@ button {
   color: var(--muted);
 }
 
+/* Phone numbers are tap-to-call links. */
+.phone-link {
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.phone-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.info address .phone-link {
+  display: inline-block;
+  padding: 8px 0;
+}
+
+.notice .phone-link {
+  color: inherit;
+}
+
 .info-cta {
   display: flex;
   justify-content: center;

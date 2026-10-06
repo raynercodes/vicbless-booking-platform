@@ -11,7 +11,7 @@ export default function Logo({ onClick }) {
   return (
     <h1 className="logo">
       {onClick ? (
-        <a className="logo-link" href="#/" onClick={onClick}>
+        <a className="logo-link" href="/" onClick={onClick}>
           {art}
           <span className="sr-only">Vicbless Barbershop, back to top</span>
         </a>

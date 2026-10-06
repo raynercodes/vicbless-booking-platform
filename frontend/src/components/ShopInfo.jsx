@@ -1,3 +1,4 @@
+import PhoneLink from './PhoneLink.jsx'
 import Reveal from './Reveal.jsx'
 import { BUSINESS, CTA_TEXT, HOURS, SERVICES } from '../config.js'
 import { fmtTime } from '../lib/availability.js'
@@ -63,7 +64,7 @@ export default function ShopInfo() {
                 <br />
               </span>
             ))}
-            {BUSINESS.phone}
+            <PhoneLink />
           </Reveal>
         </div>
       </div>

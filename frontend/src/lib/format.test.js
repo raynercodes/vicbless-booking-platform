@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { priceLabel, copyrightLine, serviceIdFromHash } from './format.js'
+import { priceLabel, copyrightLine, serviceIdFromHash, telHref } from './format.js'
 
 describe('priceLabel', () => {
   it('shows a plus for starting prices', () => {
@@ -36,5 +36,32 @@ describe('serviceIdFromHash', () => {
     expect(serviceIdFromHash('#/book?service=nope', services)).toBeNull()
     expect(serviceIdFromHash('', services)).toBeNull()
     expect(serviceIdFromHash(undefined, services)).toBeNull()
+  })
+})
+
+describe('telHref', () => {
+  it('turns a US number written any common way into a dialer link', () => {
+    expect(telHref('(912) 555-0199')).toBe('tel:+19125550199')
+    expect(telHref('912-555-0199')).toBe('tel:+19125550199')
+    expect(telHref('912.555.0199')).toBe('tel:+19125550199')
+    expect(telHref('9125550199')).toBe('tel:+19125550199')
+    expect(telHref(' (912) 555 0199 ')).toBe('tel:+19125550199')
+  })
+
+  it('handles a leading 1 and international numbers', () => {
+    expect(telHref('1 (912) 555-0199')).toBe('tel:+19125550199')
+    expect(telHref('+1 912 555 0199')).toBe('tel:+19125550199')
+    expect(telHref('+44 20 7946 0958')).toBe('tel:+442079460958')
+  })
+
+  it('falls back to the plain digits for other lengths', () => {
+    expect(telHref('555-0199')).toBe('tel:5550199')
+  })
+
+  it('returns an empty string when there is nothing to dial', () => {
+    expect(telHref('')).toBe('')
+    expect(telHref(null)).toBe('')
+    expect(telHref(undefined)).toBe('')
+    expect(telHref('call us')).toBe('')
   })
 })

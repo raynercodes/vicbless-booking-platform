@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import PhoneLink from '../components/PhoneLink.jsx'
 import Reveal from '../components/Reveal.jsx'
-import { BUSINESS, DAYS_AHEAD, HOURS, SERVICES, SLOT_MINUTES, STAFF, SUCCESS_HEADLINE } from '../config.js'
+import { DAYS_AHEAD, HOURS, SERVICES, SLOT_MINUTES, STAFF, SUCCESS_HEADLINE } from '../config.js'
 import { fmtTime, fromKey, keyOf, slotsForDay } from '../lib/availability.js'
 import { createBooking, getBusy, SlotTakenError } from '../lib/api.js'
 import { priceLabel, serviceIdFromHash } from '../lib/format.js'
@@ -131,7 +132,11 @@ export default function Book() {
         setStep(1)
         await loadBusy()
       } else {
-        setNotice(`Something went wrong saving your booking. Try again, or call ${BUSINESS.phone}.`)
+        setNotice(
+          <>
+            Something went wrong saving your booking. Try again, or call <PhoneLink />.
+          </>,
+        )
       }
     } finally {
       setSubmitting(false)
@@ -155,7 +160,9 @@ export default function Book() {
             {dayLabel(fromKey(done.dateKey))} at {fmtTime(done.start)}
           </p>
           <p>{payLine(booked)}</p>
-          <p className="muted">Need to change it? Call {BUSINESS.phone} and quote your code.</p>
+          <p className="muted">
+            Need to change it? Call <PhoneLink /> and quote your code.
+          </p>
           <a className="btn btn-primary" href="#/">Back to home</a>
         </section>
       </main>
