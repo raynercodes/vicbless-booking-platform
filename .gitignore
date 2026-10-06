@@ -1,4 +1,18 @@
+# Frontend
 node_modules
 dist
+
+# Backend (Python)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+
+# Misc
 .DS_Store
 *.log
