@@ -365,6 +365,26 @@ button {
   letter-spacing: 0.04em;
 }
 
+/* Quiet credit: small, muted, faint underline. Still readable, just out of the way. */
+.site-foot .credit {
+  margin: 4px 0 0;
+  font-size: 0.74rem;
+}
+
+.site-foot .credit a {
+  display: inline-block;
+  padding: 6px 4px;
+  color: var(--muted);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+
+.site-foot .credit a:hover {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+
 /* Social links along the bottom of the video. */
 .hero-socials {
   position: absolute;
@@ -683,9 +703,52 @@ button {
   color: var(--accent-media);
 }
 
+/* Centred call to action over the photo: a see-through box with a light outline.
+   Fixed light colours, so it reads the same in dark and light mode. */
+.statement-cta {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 0 20px;
+  pointer-events: none;
+}
+
+.statement-cta-link {
+  display: block;
+  max-width: min(86vw, 440px);
+  padding: 18px 36px;
+  font-size: clamp(1.1rem, 4.6vw, 1.4rem);
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--on-media);
+  text-decoration: none;
+  background: rgba(10, 6, 18, 0.28);
+  border: 2px solid rgba(246, 239, 255, 0.85);
+  border-radius: 14px;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  pointer-events: auto;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.statement-cta-link:hover {
+  color: #0a0612;
+  background: var(--accent-media);
+  border-color: var(--accent-media);
+}
+
 @media (min-width: 900px) {
+  /* Taller section and slightly smaller words on wide screens, so the centred button always
+     has a free band to sit in between the paragraph above and the words below. */
   .statement {
-    min-height: max(720px, 90svh);
+    min-height: max(840px, 92svh);
+  }
+
+  .statement-words li {
+    font-size: clamp(3.4rem, 5.4vw, 4.8rem);
   }
 
   /* On wide screens the words sit on the left, so shade the left side as well. */

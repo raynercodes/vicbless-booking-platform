@@ -83,3 +83,9 @@ export const STATEMENT = {
   body: 'Consistent precision cuts with clean detail and a personalized cut experience to give you confidence and blessings.',
   words: ['Quality', 'Detail', 'Consistency', 'Baxley, GA'],
 }
+
+// Call to action in the middle of the photo section (exact wording from Vic).
+export const STATEMENT_CTA = 'Book Here to get blessed'
+
+// Small credit in the footer.
+export const CREDIT = { text: 'Website By RaynerCodes Cloud Solutions', url: 'https://raynercodes.dev' }

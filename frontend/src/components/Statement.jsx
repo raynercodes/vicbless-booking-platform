@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import Reveal from './Reveal.jsx'
-import { STATEMENT } from '../config.js'
+import { STATEMENT, STATEMENT_CTA } from '../config.js'
 import { useSettings } from '../lib/useSettings.js'
 
 // Photo section with its own parallax. --pan goes 0 to 1 as the section travels from
@@ -66,6 +66,15 @@ export default function Statement() {
             </Reveal>
           ))}
         </ul>
+      </div>
+
+      {/* A see-through box in the middle of the photo, so the photo stays visible behind it. */}
+      <div className="statement-cta">
+        <Reveal className="statement-cta-wrap" delay={300}>
+          <a className="statement-cta-link" href="#/book">
+            {STATEMENT_CTA}
+          </a>
+        </Reveal>
       </div>
     </section>
   )
