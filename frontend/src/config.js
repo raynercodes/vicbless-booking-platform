@@ -89,3 +89,7 @@ export const STATEMENT_CTA = 'Book Here to get blessed'
 
 // Small credit in the footer.
 export const CREDIT = { text: 'Website By RaynerCodes Cloud Solutions', url: 'https://raynercodes.dev' }
+
+// Big headline on the screen shown after a booking is confirmed (exact wording from Vic).
+// Two lines; the second one is shown in the purple accent colour.
+export const SUCCESS_HEADLINE = ['If you wanna get fresh..', 'Come to Vicbless']

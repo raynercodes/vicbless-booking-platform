@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BUSINESS, DAYS_AHEAD, HOURS, SERVICES, SLOT_MINUTES, STAFF } from '../config.js'
+import Reveal from '../components/Reveal.jsx'
+import { BUSINESS, DAYS_AHEAD, HOURS, SERVICES, SLOT_MINUTES, STAFF, SUCCESS_HEADLINE } from '../config.js'
 import { fmtTime, fromKey, keyOf, slotsForDay } from '../lib/availability.js'
 import { createBooking, getBusy, SlotTakenError } from '../lib/api.js'
 import { priceLabel, serviceIdFromHash } from '../lib/format.js'
@@ -140,9 +141,12 @@ export default function Book() {
   if (done) {
     const booked = SERVICES.find((s) => s.id === done.serviceId)
     return (
-      <main className="book">
+      <main className="book book-done">
         <section className="done" aria-live="polite">
-          <h1 className="book-title">You're booked, {done.name.split(' ')[0]}.</h1>
+          <Reveal as="h1" from="above" className="done-headline">
+            <span>{SUCCESS_HEADLINE[0]}</span> <span className="done-line-2">{SUCCESS_HEADLINE[1]}</span>
+          </Reveal>
+          <h2 className="book-title done-booked">You're booked, {done.name.split(' ')[0]}.</h2>
           <p className="code" aria-label="Confirmation code">{done.code}</p>
           <p>
             <strong>{booked.name}</strong> with {staff.name}

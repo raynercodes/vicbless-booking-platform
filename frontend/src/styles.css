@@ -1164,6 +1164,39 @@ html[data-motion='off'] .switch-track::after {
   margin-top: 16px;
 }
 
+/* Big headline on the booking success screen. */
+.done-headline {
+  margin: 0 0 28px;
+  font-size: clamp(2.6rem, 11vw, 4.6rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  font-variation-settings: 'wdth' 70;
+  text-wrap: balance;
+}
+
+.done-headline span {
+  display: block;
+}
+
+.done-headline .done-line-2 {
+  color: var(--accent);
+}
+
+.book-title.done-booked {
+  margin: 0 0 12px;
+  font-size: clamp(1.5rem, 5.5vw, 2rem);
+}
+
+/* The success screen is wider than the booking steps, so the headline can be big. */
+.book.book-done {
+  max-width: 960px;
+}
+
+.book-done .done p {
+  max-width: 60ch;
+}
+
 @media (max-width: 520px) {
   .book-now {
     padding: 16px 48px;
