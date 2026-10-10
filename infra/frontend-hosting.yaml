@@ -1,0 +1,358 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Vicbless frontend hosting. A private S3 bucket behind CloudFront (origin access control),
+  an optional custom domain with an ACM certificate and Route 53 records, and an optional
+  preview gate that keeps a non-public environment private. Deploy in us-east-1.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: dev adds a no-index header. Use PreviewKey to also keep it private.
+
+  SiteDomain:
+    Type: String
+    Default: ''
+    Description: >-
+      Main domain for this environment, for example vicbless.com or dev.vicbless.com.
+      Leave empty to use the default CloudFront address (xxxx.cloudfront.net).
+
+  IncludeWww:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+    Description: Also serve www.<SiteDomain>.
+
+  HostedZoneId:
+    Type: String
+    Default: ''
+    Description: >-
+      Route 53 hosted zone that contains SiteDomain. When set, the certificate is validated
+      and the DNS records are created automatically.
+
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: >-
+      Use an existing ACM certificate (must be in us-east-1) instead of creating one.
+      For when DNS is not in Route 53. The DNS records are then added by hand.
+
+  PreviewKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+    AllowedPattern: '^$|^[A-Za-z0-9_-]{16,64}$'
+    Description: >-
+      Optional secret that keeps the site private. Visitors open https://site/?key=<this value>
+      once, which sets a cookie. Leave empty for a public site (production).
+
+Rules:
+  DomainNeedsDnsOrCertificate:
+    RuleCondition: !Not [!Equals [!Ref SiteDomain, '']]
+    Assertions:
+      - Assert: !Not [!And [!Equals [!Ref HostedZoneId, ''], !Equals [!Ref CertificateArn, '']]]
+        AssertDescription: >-
+          A custom domain needs either a HostedZoneId (automatic) or a CertificateArn (manual DNS).
+
+Conditions:
+  IsDev: !Equals [!Ref Environment, dev]
+  HasDomain: !Not [!Equals [!Ref SiteDomain, '']]
+  HasZone: !Not [!Equals [!Ref HostedZoneId, '']]
+  HasCertArn: !Not [!Equals [!Ref CertificateArn, '']]
+  UseCustomDomain: !And
+    - !Condition HasDomain
+    - !Or [!Condition HasZone, !Condition HasCertArn]
+  CreateCert: !And
+    - !Condition UseCustomDomain
+    - !Condition HasZone
+    - !Not [!Condition HasCertArn]
+  WithWww: !And
+    - !Condition UseCustomDomain
+    - !Equals [!Ref IncludeWww, 'true']
+  CreateRecords: !And
+    - !Condition UseCustomDomain
+    - !Condition HasZone
+  CreateRecordsWww: !And
+    - !Condition CreateRecords
+    - !Condition WithWww
+  HasPreviewKey: !Not [!Equals [!Ref PreviewKey, '']]
+
+Resources:
+  # ---------------------------------------------------------------
+  # Where the built site lives. Private: only CloudFront can read it.
+  # ---------------------------------------------------------------
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub vicbless-frontend-${Environment}-${AWS::AccountId}
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - Key: Project
+          Value: vicbless-booking-platform
+        - Key: Environment
+          Value: !Ref Environment
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub vicbless-${Environment}-oac
+        Description: Lets CloudFront, and only CloudFront, read the site bucket
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${SiteBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt SiteBucket.Arn
+              - !Sub ${SiteBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  # ---------------------------------------------------------------
+  # Response headers: security headers always, no-index on dev.
+  # ---------------------------------------------------------------
+  SecurityHeaders:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub vicbless-${Environment}-security-headers
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 31536000
+            IncludeSubdomains: false
+            Preload: false
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+        CustomHeadersConfig: !If
+          - IsDev
+          - Items:
+              - Header: X-Robots-Tag
+                Value: noindex, nofollow
+                Override: true
+          - !Ref AWS::NoValue
+
+  # ---------------------------------------------------------------
+  # Preview gate (only when PreviewKey is set). Runs before anything is
+  # served. A cookie works for video on iPhones, unlike a password prompt.
+  #   no cookie, no key      -> 403 "not public yet"
+  #   ?key=<secret>          -> sets a 30 day cookie and redirects to the clean address
+  #   cookie matches         -> the request goes through
+  # ---------------------------------------------------------------
+  PreviewGate:
+    Type: AWS::CloudFront::Function
+    Condition: HasPreviewKey
+    Properties:
+      Name: !Sub vicbless-${Environment}-preview-gate
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Keeps a non-public Vicbless environment private
+        Runtime: cloudfront-js-2.0
+      FunctionCode: !Sub |
+        function handler(event) {
+          var request = event.request;
+          var key = '${PreviewKey}';
+          var cookies = request.cookies || {};
+          if (cookies.vb_preview && cookies.vb_preview.value === key) {
+            return request;
+          }
+          var query = request.querystring || {};
+          if (query.key && query.key.value === key) {
+            var rest = [];
+            for (var name in query) {
+              if (name !== 'key') {
+                rest.push(name + '=' + query[name].value);
+              }
+            }
+            return {
+              statusCode: 302,
+              statusDescription: 'Found',
+              headers: {
+                location: { value: request.uri + (rest.length ? '?' + rest.join('&') : '') },
+                'cache-control': { value: 'no-store' }
+              },
+              cookies: {
+                vb_preview: { value: key, attributes: 'Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000' }
+              }
+            };
+          }
+          return {
+            statusCode: 403,
+            statusDescription: 'Forbidden',
+            headers: {
+              'content-type': { value: 'text/html; charset=utf-8' },
+              'cache-control': { value: 'no-store' }
+            },
+            body: '<!doctype html><title>Vicbless preview</title><h1>Vicbless preview</h1><p>This site is not public yet.</p>'
+          };
+        }
+
+  # ---------------------------------------------------------------
+  # HTTPS certificate (only when the domain is in Route 53 and no certificate was supplied).
+  # Must be in us-east-1 for CloudFront.
+  # ---------------------------------------------------------------
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: CreateCert
+    Properties:
+      DomainName: !Ref SiteDomain
+      SubjectAlternativeNames: !If
+        - WithWww
+        - [!Sub 'www.${SiteDomain}']
+        - !Ref AWS::NoValue
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref SiteDomain
+          HostedZoneId: !Ref HostedZoneId
+        - !If
+          - WithWww
+          - DomainName: !Sub 'www.${SiteDomain}'
+            HostedZoneId: !Ref HostedZoneId
+          - !Ref AWS::NoValue
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub Vicbless ${Environment} site
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Aliases: !If
+          - UseCustomDomain
+          - !If
+            - WithWww
+            - [!Ref SiteDomain, !Sub 'www.${SiteDomain}']
+            - [!Ref SiteDomain]
+          - !Ref AWS::NoValue
+        Origins:
+          - Id: site-bucket
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: site-bucket
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # AWS managed policy "CachingOptimized". Cache lifetimes come from the Cache-Control
+          # headers that infra/publish-site.sh sets on each file.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: !Ref SecurityHeaders
+          FunctionAssociations: !If
+            - HasPreviewKey
+            - - EventType: viewer-request
+                FunctionARN: !GetAtt PreviewGate.FunctionMetadata.FunctionARN
+            - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - UseCustomDomain
+          - AcmCertificateArn: !If [HasCertArn, !Ref CertificateArn, !Ref Certificate]
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+
+  # ---------------------------------------------------------------
+  # DNS records (only when the domain is in Route 53).
+  # Z2FDTNDATAQYW2 is CloudFront's fixed hosted zone id for alias records.
+  # ---------------------------------------------------------------
+  SiteRecords:
+    Type: AWS::Route53::RecordSetGroup
+    Condition: CreateRecords
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      RecordSets:
+        - Name: !Ref SiteDomain
+          Type: A
+          AliasTarget:
+            DNSName: !GetAtt Distribution.DomainName
+            HostedZoneId: Z2FDTNDATAQYW2
+        - Name: !Ref SiteDomain
+          Type: AAAA
+          AliasTarget:
+            DNSName: !GetAtt Distribution.DomainName
+            HostedZoneId: Z2FDTNDATAQYW2
+        - !If
+          - CreateRecordsWww
+          - Name: !Sub 'www.${SiteDomain}'
+            Type: A
+            AliasTarget:
+              DNSName: !GetAtt Distribution.DomainName
+              HostedZoneId: Z2FDTNDATAQYW2
+          - !Ref AWS::NoValue
+        - !If
+          - CreateRecordsWww
+          - Name: !Sub 'www.${SiteDomain}'
+            Type: AAAA
+            AliasTarget:
+              DNSName: !GetAtt Distribution.DomainName
+              HostedZoneId: Z2FDTNDATAQYW2
+          - !Ref AWS::NoValue
+
+Outputs:
+  BucketName:
+    Description: Bucket the built site is uploaded to
+    Value: !Ref SiteBucket
+  DistributionId:
+    Description: CloudFront distribution id (used to refresh the cache after a deploy)
+    Value: !Ref Distribution
+  DistributionDomain:
+    Description: Default CloudFront address. For manual DNS, point a CNAME or ALIAS here.
+    Value: !GetAtt Distribution.DomainName
+  SiteUrl:
+    Description: Where the site can be opened
+    Value: !If
+      - UseCustomDomain
+      - !Sub https://${SiteDomain}
+      - !Sub https://${Distribution.DomainName}

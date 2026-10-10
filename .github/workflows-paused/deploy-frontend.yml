@@ -1,0 +1,213 @@
+name: Deploy frontend
+
+# dev:  every push to the dev branch that touches the frontend or infra deploys straight away.
+# prod: manual only, from main. It shows the plan first, then waits for approval on the
+#       "production" GitHub environment, then applies it and publishes the site.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'frontend/**'
+      - 'infra/frontend-hosting.yaml'
+      - 'infra/publish-site.sh'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: Where to deploy (prod only runs from main)
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-frontend-${{ inputs.target_environment || 'dev' }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: frontend/dist
+          if-no-files-found: error
+
+  # ------------------------------------------------------------
+  # DEV: deploys on push, no approval.
+  # ------------------------------------------------------------
+  deploy-dev:
+    needs: build
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target_environment == 'dev')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-dist
+          path: dist
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy the hosting stack (does nothing if it is already up to date)
+        env:
+          DEV_DOMAIN: ${{ vars.DEV_DOMAIN }}
+          DEV_HOSTED_ZONE_ID: ${{ vars.DEV_HOSTED_ZONE_ID }}
+          DEV_PREVIEW_KEY: ${{ secrets.DEV_PREVIEW_KEY }}
+        run: |
+          aws cloudformation deploy \
+            --stack-name vicbless-frontend-dev \
+            --template-file infra/frontend-hosting.yaml \
+            --parameter-overrides \
+              Environment=dev \
+              SiteDomain="$DEV_DOMAIN" \
+              HostedZoneId="$DEV_HOSTED_ZONE_ID" \
+              PreviewKey="$DEV_PREVIEW_KEY" \
+            --no-fail-on-empty-changeset
+      - name: Publish the site
+        run: bash infra/publish-site.sh vicbless-frontend-dev dist
+      - name: Print the dev address
+        run: |
+          URL=$(aws cloudformation describe-stacks --stack-name vicbless-frontend-dev --query "Stacks[0].Outputs[?OutputKey=='SiteUrl'].OutputValue" --output text)
+          echo "Dev site: $URL (open it once with ?key=<your preview key> on each device)"
+
+  # ------------------------------------------------------------
+  # PROD step 1: show the plan. Changes nothing.
+  # ------------------------------------------------------------
+  plan-prod:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target_environment == 'prod' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.create-changeset.outputs.has_changes }}
+      changeset_type: ${{ steps.changeset-type.outputs.type }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Work out whether the stack is new or an update
+        id: changeset-type
+        run: |
+          STATUS=$(aws cloudformation describe-stacks --stack-name vicbless-frontend-prod --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo "NOT_FOUND")
+          case "$STATUS" in
+            NOT_FOUND|DELETE_COMPLETE|REVIEW_IN_PROGRESS|ROLLBACK_COMPLETE) echo "type=CREATE" >> "$GITHUB_OUTPUT" ;;
+            *) echo "type=UPDATE" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - name: Create the changeset (applies nothing yet)
+        id: create-changeset
+        env:
+          PROD_DOMAIN: ${{ vars.PROD_DOMAIN }}
+          PROD_INCLUDE_WWW: ${{ vars.PROD_INCLUDE_WWW }}
+          PROD_HOSTED_ZONE_ID: ${{ vars.PROD_HOSTED_ZONE_ID }}
+          PROD_CERTIFICATE_ARN: ${{ vars.PROD_CERTIFICATE_ARN }}
+        run: |
+          jq -n \
+            --arg domain "$PROD_DOMAIN" \
+            --arg www "${PROD_INCLUDE_WWW:-false}" \
+            --arg zone "$PROD_HOSTED_ZONE_ID" \
+            --arg cert "$PROD_CERTIFICATE_ARN" \
+            '[
+              {ParameterKey: "Environment", ParameterValue: "prod"},
+              {ParameterKey: "SiteDomain", ParameterValue: $domain},
+              {ParameterKey: "IncludeWww", ParameterValue: $www},
+              {ParameterKey: "HostedZoneId", ParameterValue: $zone},
+              {ParameterKey: "CertificateArn", ParameterValue: $cert},
+              {ParameterKey: "PreviewKey", ParameterValue: ""}
+            ]' > params.json
+
+          aws cloudformation create-change-set \
+            --stack-name vicbless-frontend-prod \
+            --change-set-name gha-${{ github.run_id }} \
+            --change-set-type ${{ steps.changeset-type.outputs.type }} \
+            --template-body file://infra/frontend-hosting.yaml \
+            --parameters file://params.json
+
+          aws cloudformation wait change-set-create-complete \
+            --stack-name vicbless-frontend-prod \
+            --change-set-name gha-${{ github.run_id }} || true
+
+          STATUS=$(aws cloudformation describe-change-set --stack-name vicbless-frontend-prod --change-set-name gha-${{ github.run_id }} --query "Status" --output text)
+          REASON=$(aws cloudformation describe-change-set --stack-name vicbless-frontend-prod --change-set-name gha-${{ github.run_id }} --query "StatusReason" --output text)
+
+          if [ "$STATUS" == "FAILED" ]; then
+            if [[ "$REASON" == *"didn't contain changes"* ]] || [[ "$REASON" == *"No updates are to be performed"* ]]; then
+              echo "No infrastructure changes. Prod already matches the template."
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+              aws cloudformation delete-change-set --stack-name vicbless-frontend-prod --change-set-name gha-${{ github.run_id }}
+            else
+              echo "The changeset failed: $REASON"
+              exit 1
+            fi
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Print the plan
+        if: steps.create-changeset.outputs.has_changes == 'true'
+        run: |
+          aws cloudformation describe-change-set \
+            --stack-name vicbless-frontend-prod \
+            --change-set-name gha-${{ github.run_id }} \
+            --query "Changes[].{Action:ResourceChange.Action,Resource:ResourceChange.LogicalResourceId,Type:ResourceChange.ResourceType,Replacement:ResourceChange.Replacement}" \
+            --output table
+
+  # ------------------------------------------------------------
+  # PROD step 2: waits for approval, applies the plan, publishes the site.
+  # ------------------------------------------------------------
+  deploy-prod:
+    needs: [plan-prod, build]
+    if: github.event_name == 'workflow_dispatch' && inputs.target_environment == 'prod' && github.ref == 'refs/heads/main' && success()
+    runs-on: ubuntu-latest
+    environment: production # pauses here until a reviewer approves (set up in repo Settings, Environments)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-dist
+          path: dist
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Apply the changeset (only if there is something to apply)
+        if: needs.plan-prod.outputs.has_changes == 'true'
+        run: |
+          aws cloudformation execute-change-set \
+            --stack-name vicbless-frontend-prod \
+            --change-set-name gha-${{ github.run_id }}
+
+          if [ "${{ needs.plan-prod.outputs.changeset_type }}" == "CREATE" ]; then
+            aws cloudformation wait stack-create-complete --stack-name vicbless-frontend-prod
+          else
+            aws cloudformation wait stack-update-complete --stack-name vicbless-frontend-prod
+          fi
+      - name: Publish the site
+        run: bash infra/publish-site.sh vicbless-frontend-prod dist
+      - name: Print the live address
+        run: |
+          URL=$(aws cloudformation describe-stacks --stack-name vicbless-frontend-prod --query "Stacks[0].Outputs[?OutputKey=='SiteUrl'].OutputValue" --output text)
+          echo "Prod site: $URL"

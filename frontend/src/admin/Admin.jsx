@@ -1,0 +1,85 @@
+import { useEffect, useState } from 'react'
+import './admin.css'
+import SiteMenu from '../components/SiteMenu.jsx'
+import { copyrightLine } from '../lib/format.js'
+import Greeting from './Greeting.jsx'
+import Schedule from './Schedule.jsx'
+import SignIn from './SignIn.jsx'
+import LoopingLogo from './LoopingLogo.jsx'
+import { pickGreeting } from './greetings.js'
+import { isSignedIn, signOut } from './mockAdminApi.js'
+
+const LAST_GREETING_KEY = 'vicbless.admin.lastGreeting'
+
+function readLastGreeting() {
+  try {
+    return localStorage.getItem(LAST_GREETING_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export default function Admin() {
+  const [signedIn, setSignedIn] = useState(isSignedIn)
+
+  // One greeting per visit: the sign-in screen and the dashboard show the same one, and the next
+  // visit gets a different one.
+  const [greeting] = useState(() => pickGreeting({ last: readLastGreeting() }))
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAST_GREETING_KEY, greeting)
+    } catch {
+      /* storage blocked: the next visit may repeat it, which is harmless */
+    }
+  }, [greeting])
+
+  // Keep the page out of search results, and give the tab its own title while it is open.
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = "Vic's dashboard"
+    const meta = document.createElement('meta')
+    meta.name = 'robots'
+    meta.content = 'noindex, nofollow'
+    document.head.appendChild(meta)
+    return () => {
+      document.title = previousTitle
+      meta.remove()
+    }
+  }, [])
+
+  if (!signedIn) return <SignIn greeting={greeting} onSignedIn={() => setSignedIn(true)} />
+
+  return (
+    <main className="admin">
+      <header className="admin-bar">
+        <SiteMenu>
+          <a className="menu-link" href="#/">
+            View site
+          </a>
+          <button
+            type="button"
+            className="menu-link"
+            onClick={() => {
+              signOut()
+              setSignedIn(false)
+            }}
+          >
+            Sign out
+          </button>
+        </SiteMenu>
+        <LoopingLogo variant="bar" />
+        <span aria-hidden="true" />
+      </header>
+
+      <Greeting message={greeting} />
+
+      <p className="admin-preview-note">
+        Preview data. Bookings made on the site in this browser show up here, along with sample ones marked "sample". Cancelling and blocking time work too, and are saved in this browser only.
+      </p>
+
+      <Schedule />
+
+      <footer className="admin-foot">{copyrightLine()}</footer>
+    </main>
+  )
+}

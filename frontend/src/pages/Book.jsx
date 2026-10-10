@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import PhoneLink from '../components/PhoneLink.jsx'
 import Reveal from '../components/Reveal.jsx'
-import { DAYS_AHEAD, HOURS, SERVICES, SLOT_MINUTES, STAFF, SUCCESS_HEADLINE } from '../config.js'
-import { fmtTime, fromKey, keyOf, slotsForDay } from '../lib/availability.js'
-import { createBooking, getBusy, SlotTakenError } from '../lib/api.js'
-import { priceLabel, serviceIdFromHash } from '../lib/format.js'
+import { DAYS_AHEAD, HOURS, LIMITS, SERVICES, SLOT_MINUTES, STAFF, SUCCESS_HEADLINE } from '../config.js'
+import { fmtTime, fromKey, keyOf, slotsForDay, startsForDay } from '../lib/availability.js'
+import { createBooking, getAvailability, SlotTakenError } from '../lib/api.js'
+import { countLabel, nearLimit, priceLabel, serviceIdFromHash } from '../lib/format.js'
 
 const STEPS = ['Service', 'Time', 'Details']
+const REFRESH_MS = 30000 // how often the time grid re-checks while it is open
 const payLine = (s) =>
   s.from
     ? `Pay at the shop. Starts at $${s.price}, the final price depends on what you get.`
@@ -36,7 +37,12 @@ export default function Book() {
   const days = useMemo(buildDays, [])
   const staff = STAFF[0]
 
-  const [busy, setBusy] = useState(null)
+  // For each day: the taken times, and whether the whole day is off.
+  const [availability, setAvailability] = useState(null)
+  const busy = useMemo(
+    () => availability && Object.fromEntries(Object.entries(availability).map(([k, v]) => [k, v.busy])),
+    [availability],
+  )
   const [loadError, setLoadError] = useState(false)
   // A service link on the home page (#/book?service=mens-design) arrives with the service chosen.
   const [preselected] = useState(() => serviceIdFromHash(window.location.hash, SERVICES))
@@ -53,9 +59,9 @@ export default function Book() {
   const service = SERVICES.find((s) => s.id === serviceId) || null
 
   const loadBusy = () =>
-    getBusy(days.map(keyOf))
+    getAvailability(days.map(keyOf))
       .then((result) => {
-        setBusy(result)
+        setAvailability(result)
         setLoadError(false)
       })
       .catch(() => setLoadError(true))
@@ -63,6 +69,25 @@ export default function Book() {
   useEffect(() => {
     loadBusy()
   }, [])
+
+  // While the time step is open, check again every 30 seconds and whenever the tab comes back
+  // into view, so a time someone else just booked turns grey instead of failing at the last step.
+  useEffect(() => {
+    if (step !== 1) return undefined
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        getAvailability(days.map(keyOf))
+          .then(setAvailability)
+          .catch(() => {}) // a missed refresh is fine, the next one or the final check catches up
+      }
+    }
+    const timer = window.setInterval(refresh, REFRESH_MS)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [step])
 
   const slotsByDay = useMemo(() => {
     if (!busy || !service) return {}
@@ -89,6 +114,15 @@ export default function Book() {
     if (first) setDateKey(keyOf(first))
   }, [step, dateKey, slotsByDay, days])
 
+  // If the time you picked gets taken while the page is open, say so and let you pick again.
+  useEffect(() => {
+    if (time === null || !dateKey || !busy) return
+    if (!(slotsByDay[dateKey] || []).includes(time)) {
+      setTime(null)
+      setNotice('That time was just taken. Pick another time.')
+    }
+  }, [slotsByDay])
+
   const reach = !service ? 0 : time === null ? 1 : 2
 
   function chooseService(id) {
@@ -106,7 +140,7 @@ export default function Book() {
     const err = {}
     if (form.name.trim().length < 2) err.name = 'Enter your full name.'
     if (form.phone.replace(/\D/g, '').length < 10) err.phone = 'Enter a 10-digit mobile number so Vic can reach you.'
-    if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) err.email = 'Enter a valid email, or leave it blank.'
+    if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) err.email = "That email doesn't look right. Use something like name@example.com, or leave it blank."
     setErrors(err)
     if (Object.keys(err).length) return
 
@@ -171,6 +205,11 @@ export default function Book() {
 
   const selectedDay = dateKey ? fromKey(dateKey) : null
   const daySlots = dateKey ? slotsByDay[dateKey] || [] : []
+  const openTimes = new Set(daySlots)
+  const dayStarts =
+    selectedDay && service
+      ? startsForDay({ date: selectedDay, minutes: service.minutes, hours: HOURS, slotMinutes: SLOT_MINUTES })
+      : []
 
   return (
     <main className="book">
@@ -235,7 +274,7 @@ export default function Book() {
               <div className="days" role="group" aria-label="Days">
                 {days.map((d) => {
                   const k = keyOf(d)
-                  const closed = !HOURS[d.getDay()]
+                  const closed = !HOURS[d.getDay()] || !!availability[k]?.dayOff // shop closed that weekday, or Vic took the day off
                   const free = (slotsByDay[k] || []).length
                   return (
                     <button
@@ -257,21 +296,33 @@ export default function Book() {
                 })}
               </div>
 
-              {selectedDay && daySlots.length > 0 && (
-                <div className="times" role="group" aria-label={`Open times on ${dayLabel(selectedDay)}`}>
-                  {daySlots.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className="time"
-                      aria-pressed={time === m}
-                      onClick={() => setTime(m)}
-                    >
-                      {fmtTime(m)}
-                    </button>
-                  ))}
-                </div>
+              {selectedDay && dayStarts.length > 0 && (
+                <>
+                  <div className="times" role="group" aria-label={`Times on ${dayLabel(selectedDay)}`}>
+                    {dayStarts.map((m) => {
+                      const open = openTimes.has(m)
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          className="time"
+                          aria-pressed={time === m}
+                          disabled={!open}
+                          onClick={() => {
+                            setTime(m)
+                            setNotice('')
+                          }}
+                        >
+                          {fmtTime(m)}
+                          {!open && <span className="sr-only"> (unavailable)</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {daySlots.length < dayStarts.length && <p className="times-note">Greyed-out times are not available.</p>}
+                </>
               )}
+              {selectedDay && dayStarts.length === 0 && <p className="empty">No times on this day. Pick another day.</p>}
               {!selectedDay && <p className="empty">Pick a day to see open times.</p>}
             </>
           )}
@@ -307,7 +358,7 @@ export default function Book() {
           <form onSubmit={submit} noValidate>
             <div className="field">
               <label htmlFor="f-name">Full name</label>
-              <input id="f-name" name="name" autoComplete="name" value={form.name} onChange={updateField} aria-invalid={!!errors.name} aria-describedby="e-name" />
+              <input id="f-name" name="name" maxLength={LIMITS.name} autoComplete="name" value={form.name} onChange={updateField} aria-invalid={!!errors.name} aria-describedby="e-name" />
               <p className="err" id="e-name">{errors.name}</p>
             </div>
             <div className="field">
@@ -326,7 +377,13 @@ export default function Book() {
               <label htmlFor="f-notes">
                 Notes for Vic <span className="hint">(optional)</span>
               </label>
-              <textarea id="f-notes" name="notes" rows={3} value={form.notes} onChange={updateField} />
+              <textarea id="f-notes" name="notes" rows={3} maxLength={LIMITS.notes} value={form.notes} onChange={updateField} aria-describedby="notes-count" />
+              <p
+                id="notes-count"
+                className={nearLimit(form.notes.length, LIMITS.notes) ? 'counter counter-near' : 'counter'}
+              >
+                {countLabel(form.notes.length, LIMITS.notes)}
+              </p>
             </div>
             <p className="muted">Pay at the shop. No card needed to book.</p>
             <div className="actions">

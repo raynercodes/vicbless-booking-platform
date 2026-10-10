@@ -93,3 +93,12 @@ export const CREDIT = { text: 'Website By RaynerCodes Cloud Solutions', url: 'ht
 // Big headline on the screen shown after a booking is confirmed (exact wording from Vic).
 // Two lines; the second one is shown in the purple accent colour.
 export const SUCCESS_HEADLINE = ['If you wanna get fresh..', 'Come to Vicbless']
+
+// Words shown at the top of the home page video, right under the logo. A TEST for Vic.
+// One entry per line. The last line is shown in the purple accent colour.
+// To hide it, change the list to just an empty pair of brackets.
+export const HOME_TAGLINE = ['If you wanna get fresh,', 'come to VicBless']
+
+// The most a customer may type. The booking form enforces these and shows the notes counter; the API
+// enforces the same numbers, and a backend test fails if the two ever differ.
+export const LIMITS = { name: 50, notes: 500 }

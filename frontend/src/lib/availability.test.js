@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { slotsForDay, slotStarts, blocksFor, fmtTime, keyOf, fromKey } from './availability.js'
+import { slotsForDay, slotStarts, startsForDay, blocksFor, fmtTime, keyOf, fromKey } from './availability.js'
 
 const at = (h, m = 0) => h * 60 + m
 const HOURS = {
@@ -100,5 +100,41 @@ describe('helpers', () => {
 
   it('round-trips date keys', () => {
     expect(keyOf(fromKey('2026-10-06'))).toBe('2026-10-06')
+  })
+})
+
+describe('startsForDay (the whole day, free or not)', () => {
+  const all = (date, minutes) => startsForDay({ date, minutes, hours: HOURS, slotMinutes: SLOT })
+
+  it('lists every start in the open windows, including times that are taken or already past', () => {
+    const open = run(TUESDAY, 35, { busy: [at(12, 35), at(14, 20)] })
+    const every = all(TUESDAY, 35)
+    expect(every).toHaveLength(10)
+    expect(open).toHaveLength(8)
+    for (const s of open) expect(every).toContain(s)
+    expect(every).toContain(at(12, 35)) // taken, but still part of the day
+  })
+
+  it('is empty on closed days', () => {
+    expect(all(SUNDAY, 35)).toEqual([])
+    expect(all(WEDNESDAY, 35)).toEqual([])
+  })
+
+  it('follows each window on a split day', () => {
+    const every = all(SATURDAY, 35)
+    expect(every[0]).toBe(at(9))
+    expect(every).toContain(at(12, 35))
+    expect(every).not.toContain(at(12))
+  })
+
+  it('leaves out starts where a longer service would run past closing', () => {
+    expect(all(TUESDAY, 70).at(-1)).toBeLessThan(all(TUESDAY, 35).at(-1))
+    for (const s of all(TUESDAY, 70)) expect(s + 70).toBeLessThanOrEqual(at(18))
+  })
+
+  it('never lists a start that slotsForDay offers but startsForDay does not', () => {
+    const open = run(TUESDAY, 35)
+    const every = all(TUESDAY, 35)
+    for (const s of open) expect(every).toContain(s)
   })
 })

@@ -1,16 +1,22 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import Home from './pages/Home.jsx'
 import Book from './pages/Book.jsx'
 
+// Vic's dashboard lives at #/vic. It is a separate chunk that only loads when someone opens it,
+// so customers never download it.
+const Admin = lazy(() => import('./admin/Admin.jsx'))
+
 const readPath = () => window.location.hash.replace(/^#/, '') || '/'
 const isBookingPath = (path) => path.startsWith('/book')
+const isAdminPath = (path) => /^\/vic(?:[/?]|$)/.test(path) // /vic, /vic/..., /vic?..., but not /victory
 
 // Home lives at the plain address, with no "#/" showing. Anything that lands on home with a
 // leftover "#/" (the Back to home links, an old bookmark, or editing the address bar while
 // already on home) is cleaned up in place, without adding a history entry, so the Back
 // button still works as expected.
 function cleanHomeAddress() {
-  if (!isBookingPath(readPath()) && window.location.hash) {
+  const path = readPath()
+  if (!isBookingPath(path) && !isAdminPath(path) && window.location.hash) {
     window.history.replaceState(null, '', window.location.pathname + window.location.search)
   }
 }
@@ -32,5 +38,13 @@ function useHashPath() {
 
 export default function App() {
   const path = useHashPath()
+
+  if (isAdminPath(path)) {
+    return (
+      <Suspense fallback={<p role="status" style={{ padding: 24 }}>Loading…</p>}>
+        <Admin />
+      </Suspense>
+    )
+  }
   return isBookingPath(path) ? <Book /> : <Home />
 }

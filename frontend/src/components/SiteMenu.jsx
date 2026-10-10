@@ -49,7 +49,8 @@ function Switch({ id, label, hint, checked, onToggle }) {
   )
 }
 
-export default function SiteMenu() {
+// `children` are extra rows shown at the bottom of the menu (the dashboard adds View site and Sign out).
+export default function SiteMenu({ children }) {
   const [open, setOpen] = useState(false)
   const [section, setSection] = useState(null) // 'socials' | 'settings' | null, one open at a time
   const wrapRef = useRef(null)
@@ -151,6 +152,8 @@ export default function SiteMenu() {
             />
           </div>
         </div>
+
+        {children && <div className="menu-extra">{children}</div>}
       </div>
     </div>
   )

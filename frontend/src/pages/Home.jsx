@@ -5,7 +5,7 @@ import ShopInfo from '../components/ShopInfo.jsx'
 import Statement from '../components/Statement.jsx'
 import { useSettings } from '../lib/useSettings.js'
 import Socials from '../components/Socials.jsx'
-import { CTA_TEXT } from '../config.js'
+import { CTA_TEXT, HOME_TAGLINE } from '../config.js'
 
 const PlayIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
@@ -124,6 +124,20 @@ export default function Home() {
             autoPlay
             aria-label="Vicbless presentation video"
           />
+
+          {HOME_TAGLINE.length > 0 && (
+            <p className="hero-tagline">
+              {HOME_TAGLINE.map((line, i) => (
+                <span
+                  key={line}
+                  className={HOME_TAGLINE.length > 1 && i === HOME_TAGLINE.length - 1 ? 'hero-tagline-accent' : undefined}
+                  style={{ '--i': i }}
+                >
+                  {line}{' '}
+                </span>
+              ))}
+            </p>
+          )}
 
           <div className="hero-cta">
             <a className="btn btn-primary book-now" href="#/book">

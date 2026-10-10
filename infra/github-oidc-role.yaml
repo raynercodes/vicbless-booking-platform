@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  One-time setup. The role GitHub Actions assumes (through OIDC, no stored keys) to deploy the
+  Vicbless frontend hosting stack and upload the site. Deploy once by hand, in us-east-1.
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: raynercodes/vicbless-booking-platform
+    Description: owner/repo of the GitHub repository. Check it matches yours exactly.
+  OidcProviderArn:
+    Type: String
+    Default: ''
+    Description: >-
+      ARN of the account's GitHub OIDC provider. Leave empty to use the standard one
+      (token.actions.githubusercontent.com), which already exists if another project uses OIDC.
+
+Conditions:
+  UseStandardProvider: !Equals [!Ref OidcProviderArn, '']
+
+Resources:
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: vicbless-github-actions-role
+      Description: Deploys the Vicbless frontend hosting stack from GitHub Actions
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - UseStandardProvider
+                - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+                - !Ref OidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - !Sub repo:${GitHubRepo}:ref:refs/heads/dev
+                  - !Sub repo:${GitHubRepo}:ref:refs/heads/main
+                  - !Sub repo:${GitHubRepo}:environment:production
+      Policies:
+        - PolicyName: vicbless-frontend-deploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: HostingStacks
+                Effect: Allow
+                Action: cloudformation:*
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/vicbless-frontend-*/*
+              - Sid: ValidateTemplates
+                Effect: Allow
+                Action: cloudformation:ValidateTemplate
+                Resource: '*'
+              - Sid: SiteBuckets
+                Effect: Allow
+                Action: s3:*
+                Resource:
+                  - arn:aws:s3:::vicbless-frontend-*
+                  - arn:aws:s3:::vicbless-frontend-*/*
+              - Sid: CloudFront
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateDistribution
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:ListDistributions
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:GetInvalidation
+                  - cloudfront:CreateOriginAccessControl
+                  - cloudfront:UpdateOriginAccessControl
+                  - cloudfront:DeleteOriginAccessControl
+                  - cloudfront:GetOriginAccessControl
+                  - cloudfront:ListOriginAccessControls
+                  - cloudfront:CreateResponseHeadersPolicy
+                  - cloudfront:UpdateResponseHeadersPolicy
+                  - cloudfront:DeleteResponseHeadersPolicy
+                  - cloudfront:GetResponseHeadersPolicy
+                  - cloudfront:ListResponseHeadersPolicies
+                  - cloudfront:GetCachePolicy
+                  - cloudfront:ListCachePolicies
+                  - cloudfront:CreateFunction
+                  - cloudfront:UpdateFunction
+                  - cloudfront:DeleteFunction
+                  - cloudfront:DescribeFunction
+                  - cloudfront:GetFunction
+                  - cloudfront:PublishFunction
+                  - cloudfront:ListFunctions
+                Resource: '*' # CloudFront create and list actions do not support narrower resources
+              - Sid: Certificates
+                Effect: Allow
+                Action:
+                  - acm:RequestCertificate
+                  - acm:DescribeCertificate
+                  - acm:DeleteCertificate
+                  - acm:ListCertificates
+                  - acm:AddTagsToCertificate
+                  - acm:ListTagsForCertificate
+                Resource: '*'
+              - Sid: DnsRecords
+                Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                  - route53:ListResourceRecordSets
+                  - route53:GetHostedZone
+                Resource: !Sub arn:${AWS::Partition}:route53:::hostedzone/* # tighten to the vicbless.com zones if you like
+              - Sid: DnsLookups
+                Effect: Allow
+                Action:
+                  - route53:ListHostedZones
+                  - route53:ListHostedZonesByName
+                  - route53:GetChange
+                Resource: '*'
+
+Outputs:
+  RoleArn:
+    Description: Put this in the GitHub repository variable AWS_DEPLOY_ROLE_ARN
+    Value: !GetAtt DeployRole.Arn

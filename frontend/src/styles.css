@@ -211,6 +211,50 @@ button {
   background: radial-gradient(ellipse 60% 40% at 50% 50%, rgba(10, 6, 18, 0.55), rgba(10, 6, 18, 0) 70%);
 }
 
+/* Words at the top of the video, right under the logo. A dark fade behind them keeps them readable
+   on any frame. They use fixed light colours (like the other text on the video), so they look the
+   same in dark and light mode, and they slide down into place when the page opens. */
+.hero-tagline {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 18px 16px 48px;
+  font-size: clamp(1.5rem, 6.2vw, 2.7rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-align: center;
+  font-variation-settings: 'wdth' 70;
+  color: var(--on-media);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(to bottom, rgba(10, 6, 18, 0.72), rgba(10, 6, 18, 0));
+  pointer-events: none;
+}
+
+.hero-tagline span {
+  display: block;
+  animation: tagline-in 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(0.3s + var(--i, 0) * 0.16s);
+}
+
+.hero-tagline .hero-tagline-accent {
+  color: var(--accent-media);
+}
+
+@keyframes tagline-in {
+  from {
+    opacity: 0;
+    transform: translateY(-22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .hero-cta {
   position: absolute;
   inset: 0;
@@ -627,6 +671,20 @@ button {
   transform: translateX(20px);
 }
 
+/* Extra rows at the bottom of the menu (the dashboard's View site and Sign out). */
+.menu-extra {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+button.menu-link {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+}
+
 /* Words that drop down into place instead of lifting up. */
 .reveal-down {
   transform: translateY(-28px);
@@ -799,7 +857,8 @@ button {
 }
 
 /* Motion off: the Motion setting (which starts from the visitor's system setting). */
-html[data-motion='off'] .hero .book-now {
+html[data-motion='off'] .hero .book-now,
+html[data-motion='off'] .hero-tagline span {
   animation: none;
 }
 
@@ -1062,8 +1121,22 @@ html[data-motion='off'] .switch-track::after {
   border-radius: 8px;
 }
 
-.time:hover {
+.time:hover:not(:disabled) {
   border-color: var(--accent);
+}
+
+/* Times that are taken or blocked stay visible, greyed out and struck through. */
+.time:disabled {
+  color: var(--muted);
+  text-decoration: line-through;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.times-note {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .time[aria-pressed='true'] {
@@ -1229,4 +1302,18 @@ html[data-motion='off'] .switch-track::after {
 
 html[data-motion='off'] {
   scroll-behavior: auto;
+}
+
+/* The "0/500" under the notes box. Quiet until the person is close to the limit. */
+.counter {
+  margin: 4px 0 0;
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.counter-near {
+  color: var(--danger);
+  font-weight: 600;
 }

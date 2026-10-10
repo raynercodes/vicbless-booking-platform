@@ -59,3 +59,15 @@ export function slotsForDay({ date, minutes, hours, busy = [], now = new Date(),
   }
   return out
 }
+
+// Every start time a service of `minutes` could begin on `date`, whether or not it is free.
+// Used to show the whole day with the unavailable times greyed out instead of hidden.
+export function startsForDay({ date, minutes, hours, slotMinutes = 35 }) {
+  const windows = hours[date.getDay()]
+  if (!windows) return []
+  const out = []
+  for (const [open, close] of windows) {
+    for (let s = open; s + minutes <= close; s += slotMinutes) out.push(s)
+  }
+  return out
+}
