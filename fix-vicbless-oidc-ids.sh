@@ -303,6 +303,13 @@ Resources:
                 Condition:
                   ArnEquals:
                     iam:PolicyARN: !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+              # The deploy workflow writes the version it just deployed here (app-version, nothing else).
+              - Sid: AppVersion
+                Effect: Allow
+                Action: ssm:PutParameter
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vicbless/dev/app-version
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vicbless/prod/app-version
 
 Outputs:
   RoleArn:
@@ -612,7 +619,7 @@ python3 - <<'PY'
 import hashlib, os, stat, sys
 from pathlib import Path
 stage = Path(os.environ["STAGE"]); force = os.environ.get("FORCE") == "1"
-PREV = {'infra/github-oidc-role.yaml': ['7a22eb1029f06f79ea88d3aeab4589d40be0757726eaee6afc72238419c9c5e4', '18116f7c185f6cb69b2287f3e6a10a976e987eef9ec62c9df5bfd492da6cc79f'], 'infra/bootstrap.sh': ['84f51d3d0043942dc7329ba7b0d9c7aa0e8153fd502b841d1daaaf1480bc484a', '5a4e50b90b5c1f9aa19e780ac085d91ae3217c24438c8a9683ef452b0bdf5eba'], 'infra/README.md': ['f9b7e10005cf8b9205d7b24918d976eae3c626e77bda0a2bf69c1769cea25435', '061fdfc643c07121a9641355036e39c61b91d216003c3bc37078fc13c4d5b9eb']}
+PREV = {'infra/github-oidc-role.yaml': ['7a22eb1029f06f79ea88d3aeab4589d40be0757726eaee6afc72238419c9c5e4', '46c146409e6da504f1be9694d971d7bbf7fa7a9889e69618c0f6b854e636ffc5', '18116f7c185f6cb69b2287f3e6a10a976e987eef9ec62c9df5bfd492da6cc79f'], 'infra/bootstrap.sh': ['84f51d3d0043942dc7329ba7b0d9c7aa0e8153fd502b841d1daaaf1480bc484a', '5a4e50b90b5c1f9aa19e780ac085d91ae3217c24438c8a9683ef452b0bdf5eba'], 'infra/README.md': ['f9b7e10005cf8b9205d7b24918d976eae3c626e77bda0a2bf69c1769cea25435', '061fdfc643c07121a9641355036e39c61b91d216003c3bc37078fc13c4d5b9eb']}
 sha = lambda s: hashlib.sha256(s.encode()).hexdigest()
 plan, problems = [], []
 for rel, old in PREV.items():

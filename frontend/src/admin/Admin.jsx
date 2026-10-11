@@ -7,7 +7,8 @@ import Schedule from './Schedule.jsx'
 import SignIn from './SignIn.jsx'
 import LoopingLogo from './LoopingLogo.jsx'
 import { pickGreeting } from './greetings.js'
-import { isSignedIn, signOut } from './mockAdminApi.js'
+import { API_MODE } from '../lib/mode.js'
+import { SIGNED_OUT_EVENT, isSignedIn, signOut } from './adminApi.js'
 
 const LAST_GREETING_KEY = 'vicbless.admin.lastGreeting'
 
@@ -32,6 +33,13 @@ export default function Admin() {
       /* storage blocked: the next visit may repeat it, which is harmless */
     }
   }, [greeting])
+
+  // The session ran out (or the API refused it): back to the sign-in screen instead of a dashboard that cannot load.
+  useEffect(() => {
+    const out = () => setSignedIn(false)
+    window.addEventListener(SIGNED_OUT_EVENT, out)
+    return () => window.removeEventListener(SIGNED_OUT_EVENT, out)
+  }, [])
 
   // Keep the page out of search results, and give the tab its own title while it is open.
   useEffect(() => {
@@ -73,9 +81,11 @@ export default function Admin() {
 
       <Greeting message={greeting} />
 
-      <p className="admin-preview-note">
-        Preview data. Bookings made on the site in this browser show up here, along with sample ones marked "sample". Cancelling and blocking time work too, and are saved in this browser only.
-      </p>
+      {API_MODE === 'mock' && (
+        <p className="admin-preview-note">
+          Preview data. Bookings made on the site in this browser show up here, along with sample ones marked "sample". Cancelling and blocking time work too, and are saved in this browser only.
+        </p>
+      )}
 
       <Schedule />
 

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { HOURS, SLOT_MINUTES } from '../config.js'
 import { fmtTime, fromKey } from '../lib/availability.js'
 import { dayGrid, describeRange, findConflicts, rangeFromChoice, wholeDayRange } from './blocks.js'
-import { addBlock } from './mockAdminApi.js'
+import { addBlock } from './adminApi.js'
 
 // "Block off time": part of the day or the whole day, with an optional note (Lunch, Phone booking...).
 // It will not let Vic block over a booking or over time that is already blocked, and says which.

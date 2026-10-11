@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import { HOURS, SERVICES, SLOT_MINUTES } from '../config.js'
 import { getAvailability } from '../lib/api.js'
 import { fmtTime, fromKey, keyOf } from '../lib/availability.js'
-import { moveBooking } from './mockAdminApi.js'
+import { moveBooking } from './adminApi.js'
 import { moveDateRange, moveOptions, ownStarts } from './moveTimes.js'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/

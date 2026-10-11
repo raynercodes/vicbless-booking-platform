@@ -166,10 +166,15 @@ export default function Book() {
         setStep(1)
         await loadBusy()
       } else {
+        // A message the API wrote for customers (a bad phone number, too many bookings) is shown as it is.
         setNotice(
-          <>
-            Something went wrong saving your booking. Try again, or call <PhoneLink />.
-          </>,
+          ex && ex.friendly ? (
+            ex.message
+          ) : (
+            <>
+              Something went wrong saving your booking. Try again, or call <PhoneLink />.
+            </>
+          ),
         )
       }
     } finally {

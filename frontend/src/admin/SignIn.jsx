@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import LoopingLogo from './LoopingLogo.jsx'
 import Greeting from './Greeting.jsx'
-import { signIn } from './mockAdminApi.js'
+import { API_MODE } from '../lib/mode.js'
+import { signIn } from './adminApi.js'
 
 export default function SignIn({ greeting, onSignedIn }) {
   const [password, setPassword] = useState('')
@@ -49,7 +50,7 @@ export default function SignIn({ greeting, onSignedIn }) {
         </button>
       </form>
 
-      <p className="admin-preview-note">Preview: any password works until the backend is connected.</p>
+      {API_MODE === 'mock' && <p className="admin-preview-note">Preview: any password works until the backend is connected.</p>}
       <p>
         <a href="#/">Back to the site</a>
       </p>

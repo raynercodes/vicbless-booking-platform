@@ -8,7 +8,7 @@ import JumpToDate from './JumpToDate.jsx'
 import MoveBooking from './MoveBooking.jsx'
 import NoteText from './NoteText.jsx'
 import { describeRange } from './blocks.js'
-import { cancelBooking, getDay, removeBlock } from './mockAdminApi.js'
+import { cancelBooking, getDay, removeBlock } from './adminApi.js'
 import { buildDayRows } from './schedule.js'
 
 const Chevron = ({ direction }) => (
@@ -73,8 +73,8 @@ function BookingCard({ item, ctl }) {
           onKeep={ctl.keep}
           onYes={() => ctl.doCancel(item)}
         >
-          Cancel {item.name}'s {fmtTime(item.start)} {serviceName}? The time opens up for other customers. The customer is not
-          told yet.
+          Cancel {item.name}'s {fmtTime(item.start)} {serviceName}? The time opens up for other customers. If they left an
+          email, they are told it was cancelled.
         </ConfirmBox>
       )}
 

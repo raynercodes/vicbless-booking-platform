@@ -12,7 +12,7 @@
 // agree. Sample ones are marked so they are never mistaken for real customers.
 
 import { HOURS, SERVICES, SLOT_MINUTES } from '../config.js'
-import { getBusy } from '../lib/api.js'
+import { getBusy } from '../lib/mockApi.js'
 import { blocksFor, fromKey, slotStarts } from '../lib/availability.js'
 import {
   blockedStartsFor,

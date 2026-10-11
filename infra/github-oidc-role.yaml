@@ -286,6 +286,13 @@ Resources:
                 Condition:
                   ArnEquals:
                     iam:PolicyARN: !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+              # The deploy workflow writes the version it just deployed here (app-version, nothing else).
+              - Sid: AppVersion
+                Effect: Allow
+                Action: ssm:PutParameter
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vicbless/dev/app-version
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vicbless/prod/app-version
 
 Outputs:
   RoleArn:
