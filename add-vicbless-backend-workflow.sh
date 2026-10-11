@@ -1,0 +1,432 @@
+#!/usr/bin/env bash
+# Vicbless: the BACKEND deploy workflow, adapted from the LeverageCut deploy.yml.
+#   dev:  every push to the dev branch that touches backend/ or infra/template.yaml deploys, no approval
+#   prod: manual only, from main: shows the plan, waits for approval on the "production" environment, applies it
+# Run from the REPO ROOT (the folder with .git, frontend/ and backend/):  bash add-vicbless-backend-workflow.sh
+# Creates ONE new file. If it already exists the script stops, so nothing of yours is overwritten
+# (run with FORCE=1 to overwrite). It does not touch the frontend workflow.
+set -euo pipefail
+
+if [ ! -d .git ] || [ ! -d frontend ] || [ ! -d backend ]; then
+  echo "Run this from the root of the vicbless-booking-platform repo (the folder with .git, frontend/ and backend/)."
+  exit 1
+fi
+
+TARGET=.github/workflows/deploy-backend.yml
+if [ -e "$TARGET" ] && [ "${FORCE:-0}" != "1" ]; then
+  echo "$TARGET already exists. Run with FORCE=1 to overwrite."
+  exit 1
+fi
+
+mkdir -p .github/workflows
+
+cat > "$TARGET" <<'VICBLESS_EOF'
+name: Deploy backend
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && format('{0} backend deploy', inputs.target_environment) || 'dev backend deploy' }}
+
+# dev:  every push to the dev branch that touches the backend or its template deploys straight away,
+#       no approval.
+# prod: manual only ("Run workflow", from main). It shows the plan first, then waits for approval on
+#       the "production" GitHub environment, then applies it.
+# Prod is DELIBERATELY separate from the automatic dev push trigger - promoting to prod is a real
+# decision, not something that should silently run (and leave a changeset sitting around needing
+# manual rejection) every single time dev gets a push.
+on:
+  push:
+    branches: [dev]
+    # Only when the backend or its template changes. The workflow file itself is left out on purpose,
+    # so adding this file before the backend exists does not start a run that has nothing to build.
+    paths:
+      - 'backend/**'
+      - 'infra/template.yaml'
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Environment to deploy (prod promotion only, run from main - dev deploys automatically on every push to dev, never needs this)'
+        required: true
+        type: choice
+        options:
+          - prod
+
+permissions:
+  id-token: write   # required for OIDC — lets this workflow request an AWS credential
+  contents: read
+
+# One deploy per environment at a time, so two quick pushes to dev cannot both try to change the same
+# stack at once. The second run waits for the first instead of cancelling it half way through a deploy.
+concurrency:
+  group: deploy-backend-${{ inputs.target_environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    # Test-only values, never used to protect any real data. They only make sure this job can never
+    # fall through to a real AWS call it has no credentials for anyway. Add the backend's own
+    # test-only settings here when it defines them (for example an admin login secret).
+    env:
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: testing
+      AWS_SECRET_ACCESS_KEY: testing
+    steps:
+      - name: Prod only deploys from main
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::A manual run deploys PROD, and prod only deploys from the main branch. Choose main under 'Use workflow from'."
+          exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - run: pytest backend/tests/ -v
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      app_version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute version string
+        id: version
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          VERSION="1.0.${{ github.run_number }}+${SHORT_SHA}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install aws-sam-cli
+      - run: sam build --template infra/template.yaml --no-cached
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Determine target artifacts bucket
+        id: bucket
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TARGET_INPUT: ${{ inputs.target_environment }}
+        run: |
+          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
+            TARGET="$TARGET_INPUT"
+          else
+            TARGET="dev"
+          fi
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          echo "name=vicbless-artifacts-${TARGET}-${ACCOUNT}" >> "$GITHUB_OUTPUT"
+      - name: Package (pushes the ZIP to S3)
+        # sam build/package work on the whole template, not one function at a time, so any function
+        # added to infra/template.yaml later is picked up here with no change to this step.
+        run: |
+          sam package \
+            --s3-bucket ${{ steps.bucket.outputs.name }} \
+            --output-template-file packaged-template.yaml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packaged-template
+          path: packaged-template.yaml
+
+  # ============================================================
+  # DEV — automatic on every push to dev, no approval gate.
+  # ============================================================
+  plan-dev:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+    outputs:
+      changeset_type: ${{ steps.changeset-type.outputs.type }}
+      has_changes: ${{ steps.create-changeset.outputs.has_changes }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packaged-template
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Determine changeset type (handles deleted/stub stacks correctly)
+        id: changeset-type
+        run: |
+          STACK_STATUS=$(aws cloudformation describe-stacks --stack-name vicbless-backend-dev --region us-east-1 --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo "NOT_FOUND")
+          if [ "$STACK_STATUS" == "NOT_FOUND" ] || [ "$STACK_STATUS" == "DELETE_COMPLETE" ] || [ "$STACK_STATUS" == "REVIEW_IN_PROGRESS" ] || [ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]; then
+            echo "type=CREATE" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=UPDATE" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create changeset (does NOT execute anything yet)
+        id: create-changeset
+        env:
+          DEV_CORS_ORIGINS: ${{ vars.DEV_CORS_ORIGINS }}
+        run: |
+          # The parameters go in as a JSON file, not on the command line, because a list of origins
+          # has commas in it and the CLI's own shorthand would split it into separate parameters.
+          # Dev allows any origin unless DEV_CORS_ORIGINS is set; there is no real data in dev.
+          jq -n \
+            --arg cors "${DEV_CORS_ORIGINS:-*}" \
+            '[
+              {ParameterKey: "Environment", ParameterValue: "dev"},
+              {ParameterKey: "CorsAllowedOrigins", ParameterValue: $cors}
+            ]' > params.json
+
+          aws cloudformation create-change-set \
+            --stack-name vicbless-backend-dev \
+            --change-set-name gha-${{ github.run_id }} \
+            --change-set-type ${{ steps.changeset-type.outputs.type }} \
+            --template-body file://packaged-template.yaml \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+            --parameters file://params.json \
+            --region us-east-1
+          aws cloudformation wait change-set-create-complete \
+            --stack-name vicbless-backend-dev \
+            --change-set-name gha-${{ github.run_id }} \
+            --region us-east-1 || true
+
+          STATUS=$(aws cloudformation describe-change-set --stack-name vicbless-backend-dev --change-set-name gha-${{ github.run_id }} --region us-east-1 --query "Status" --output text)
+          REASON=$(aws cloudformation describe-change-set --stack-name vicbless-backend-dev --change-set-name gha-${{ github.run_id }} --region us-east-1 --query "StatusReason" --output text)
+
+          if [ "$STATUS" == "FAILED" ]; then
+            if [[ "$REASON" == *"didn't contain changes"* ]] || [[ "$REASON" == *"No updates are to be performed"* ]]; then
+              echo "No changes detected — dev already matches this template. Nothing to deploy."
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+              aws cloudformation delete-change-set --stack-name vicbless-backend-dev --change-set-name gha-${{ github.run_id }} --region us-east-1
+            else
+              echo "Changeset genuinely failed: $REASON"
+              exit 1
+            fi
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Print the actual plan — this is the real diff about to be applied
+        if: steps.create-changeset.outputs.has_changes == 'true'
+        run: |
+          aws cloudformation describe-change-set \
+            --stack-name vicbless-backend-dev \
+            --change-set-name gha-${{ github.run_id }} \
+            --region us-east-1 \
+            --query "Changes[].{Action:ResourceChange.Action,Resource:ResourceChange.LogicalResourceId,Type:ResourceChange.ResourceType,Replacement:ResourceChange.Replacement}" \
+            --output table
+      - name: Clean up failed changeset (only if changeset CREATION itself failed)
+        # Scoped to the create-changeset step specifically, not the broader
+        # job-level failure() - that broader condition would also fire (and
+        # wrongly delete a perfectly good, ready-to-execute changeset) if
+        # some LATER, unrelated read-only step happened to fail after
+        # changeset creation already succeeded. This only deletes a
+        # changeset that never successfully came into existence in the
+        # first place.
+        if: steps.create-changeset.outcome == 'failure'
+        run: |
+          aws cloudformation delete-change-set \
+            --stack-name vicbless-backend-dev \
+            --change-set-name gha-${{ github.run_id }} \
+            --region us-east-1 || true
+
+  deploy-dev:
+    runs-on: ubuntu-latest
+    needs: [plan-dev, build]
+    if: github.event_name == 'push' && success()
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Execute changeset (only if there are real changes to apply)
+        if: needs.plan-dev.outputs.has_changes == 'true'
+        run: |
+          EXEC_STATUS=$(aws cloudformation describe-change-set \
+            --stack-name vicbless-backend-dev \
+            --change-set-name gha-${{ github.run_id }} \
+            --region us-east-1 \
+            --query "ExecutionStatus" --output text)
+
+          if [ "$EXEC_STATUS" == "EXECUTE_COMPLETE" ]; then
+            echo "This changeset already executed successfully — likely a duplicate job dispatch. Dev is already up to date, nothing more to do."
+          else
+            aws cloudformation execute-change-set \
+              --stack-name vicbless-backend-dev \
+              --change-set-name gha-${{ github.run_id }} \
+              --region us-east-1
+
+            if [ "${{ needs.plan-dev.outputs.changeset_type }}" == "CREATE" ]; then
+              aws cloudformation wait stack-create-complete --stack-name vicbless-backend-dev --region us-east-1
+            else
+              aws cloudformation wait stack-update-complete --stack-name vicbless-backend-dev --region us-east-1
+            fi
+          fi
+      - name: No changes to deploy
+        if: needs.plan-dev.outputs.has_changes != 'true'
+        run: echo "Dev already matches this template — nothing to deploy this run."
+      - name: Publish version to SSM Parameter Store
+        run: |
+          aws ssm put-parameter \
+            --name "/vicbless/dev/app-version" \
+            --value "${{ needs.build.outputs.app_version }}" \
+            --type String \
+            --overwrite \
+            --region us-east-1
+      - name: Print live stack URL
+        run: |
+          URL=$(aws cloudformation describe-stacks --stack-name vicbless-backend-dev --region us-east-1 --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+          echo "Dev API is live at: $URL/api/health"
+
+  # ============================================================
+  # PROD — ONLY runs on a manual workflow_dispatch with
+  # target_environment == prod, from the main branch. Never a
+  # side effect of a normal dev push.
+  # ============================================================
+  plan-prod:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target_environment == 'prod' && github.ref == 'refs/heads/main'
+    outputs:
+      changeset_type: ${{ steps.changeset-type.outputs.type }}
+      has_changes: ${{ steps.create-changeset.outputs.has_changes }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packaged-template
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Determine changeset type (handles deleted/stub stacks correctly)
+        id: changeset-type
+        run: |
+          STACK_STATUS=$(aws cloudformation describe-stacks --stack-name vicbless-backend-prod --region us-east-1 --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo "NOT_FOUND")
+          if [ "$STACK_STATUS" == "NOT_FOUND" ] || [ "$STACK_STATUS" == "DELETE_COMPLETE" ] || [ "$STACK_STATUS" == "REVIEW_IN_PROGRESS" ] || [ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]; then
+            echo "type=CREATE" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=UPDATE" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create changeset (does NOT execute anything yet)
+        id: create-changeset
+        env:
+          PROD_CORS_ORIGINS: ${{ vars.PROD_CORS_ORIGINS }}
+        run: |
+          # Prod only allows the real site, unless PROD_CORS_ORIGINS says otherwise.
+          jq -n \
+            --arg cors "${PROD_CORS_ORIGINS:-https://vicbless.com,https://www.vicbless.com}" \
+            '[
+              {ParameterKey: "Environment", ParameterValue: "prod"},
+              {ParameterKey: "CorsAllowedOrigins", ParameterValue: $cors}
+            ]' > params.json
+
+          aws cloudformation create-change-set \
+            --stack-name vicbless-backend-prod \
+            --change-set-name gha-${{ github.run_id }} \
+            --change-set-type ${{ steps.changeset-type.outputs.type }} \
+            --template-body file://packaged-template.yaml \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+            --parameters file://params.json \
+            --region us-east-1
+          aws cloudformation wait change-set-create-complete \
+            --stack-name vicbless-backend-prod \
+            --change-set-name gha-${{ github.run_id }} \
+            --region us-east-1 || true
+
+          STATUS=$(aws cloudformation describe-change-set --stack-name vicbless-backend-prod --change-set-name gha-${{ github.run_id }} --region us-east-1 --query "Status" --output text)
+          REASON=$(aws cloudformation describe-change-set --stack-name vicbless-backend-prod --change-set-name gha-${{ github.run_id }} --region us-east-1 --query "StatusReason" --output text)
+
+          if [ "$STATUS" == "FAILED" ]; then
+            if [[ "$REASON" == *"didn't contain changes"* ]] || [[ "$REASON" == *"No updates are to be performed"* ]]; then
+              echo "No changes detected — prod already matches this template. Nothing to deploy."
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+              aws cloudformation delete-change-set --stack-name vicbless-backend-prod --change-set-name gha-${{ github.run_id }} --region us-east-1
+            else
+              echo "Changeset genuinely failed: $REASON"
+              exit 1
+            fi
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Print the actual plan — this is the real diff about to be applied
+        if: steps.create-changeset.outputs.has_changes == 'true'
+        run: |
+          aws cloudformation describe-change-set \
+            --stack-name vicbless-backend-prod \
+            --change-set-name gha-${{ github.run_id }} \
+            --region us-east-1 \
+            --query "Changes[].{Action:ResourceChange.Action,Resource:ResourceChange.LogicalResourceId,Type:ResourceChange.ResourceType,Replacement:ResourceChange.Replacement}" \
+            --output table
+      - name: Clean up failed changeset (only if changeset CREATION itself failed)
+        if: steps.create-changeset.outcome == 'failure'
+        run: |
+          aws cloudformation delete-change-set \
+            --stack-name vicbless-backend-prod \
+            --change-set-name gha-${{ github.run_id }} \
+            --region us-east-1 || true
+
+  deploy-prod:
+    runs-on: ubuntu-latest
+    needs: [plan-prod, build]
+    if: github.event_name == 'workflow_dispatch' && inputs.target_environment == 'prod' && github.ref == 'refs/heads/main' && success()
+    environment: production   # <- pauses for GitHub Environment approval (set up in repo Settings, Environments)
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Execute changeset (only if there are real changes to apply)
+        if: needs.plan-prod.outputs.has_changes == 'true'
+        run: |
+          EXEC_STATUS=$(aws cloudformation describe-change-set \
+            --stack-name vicbless-backend-prod \
+            --change-set-name gha-${{ github.run_id }} \
+            --region us-east-1 \
+            --query "ExecutionStatus" --output text)
+
+          if [ "$EXEC_STATUS" == "EXECUTE_COMPLETE" ]; then
+            echo "This changeset already executed successfully — likely a duplicate job dispatch. Prod is already up to date, nothing more to do."
+          else
+            aws cloudformation execute-change-set \
+              --stack-name vicbless-backend-prod \
+              --change-set-name gha-${{ github.run_id }} \
+              --region us-east-1
+
+            if [ "${{ needs.plan-prod.outputs.changeset_type }}" == "CREATE" ]; then
+              aws cloudformation wait stack-create-complete --stack-name vicbless-backend-prod --region us-east-1
+            else
+              aws cloudformation wait stack-update-complete --stack-name vicbless-backend-prod --region us-east-1
+            fi
+          fi
+      - name: No changes to deploy
+        if: needs.plan-prod.outputs.has_changes != 'true'
+        run: echo "Prod already matches this template — nothing to deploy this run."
+      - name: Publish version to SSM Parameter Store
+        run: |
+          aws ssm put-parameter \
+            --name "/vicbless/prod/app-version" \
+            --value "${{ needs.build.outputs.app_version }}" \
+            --type String \
+            --overwrite \
+            --region us-east-1
+      - name: Print live stack URL
+        run: |
+          URL=$(aws cloudformation describe-stacks --stack-name vicbless-backend-prod --region us-east-1 --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+          echo "Prod API is live at: $URL/api/health"
+VICBLESS_EOF
+
+echo "Wrote $TARGET"
+echo ""
+
+# the check this change has: is the workflow valid? (actionlint also shell-checks every script block)
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint "$TARGET" && echo "actionlint: clean"
+else
+  echo "actionlint is not installed here, so it was not checked locally (GitHub checks it when it runs)."
+  echo "To check it yourself:  brew install actionlint   then   actionlint $TARGET"
+fi
+
+echo ""
+echo "Git commands (not run for you):"
+echo "  git add -A"
+echo "  git commit -m \"Add the backend deploy workflow (dev on push, prod manual with approval)\""
+echo "  git push"
