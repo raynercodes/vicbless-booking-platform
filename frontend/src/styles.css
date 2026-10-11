@@ -1317,3 +1317,51 @@ html[data-motion='off'] {
   color: var(--danger);
   font-weight: 600;
 }
+
+/* ---------- Logo coin spin (the logo in the home page's top bar) ----------
+   Stands still for 2.5 s, then turns around its upright middle line like a coin spinning on a table: two full
+   turns over 3 s, a little quicker at first and slowing down, then it is standing straight again. Repeats forever.
+   Nothing about the letters changes. Only the whole logo is turned.
+   To change it: the 5.5s (whole cycle = standing still + spinning) and the 45.45% (the share of the cycle spent
+   standing still: 2.5 / 5.5) below. The spin lasts the rest, 3 s. 720deg is two turns; 360deg is one. */
+.brand .logo {
+  perspective: 700px; /* gives the turn some depth: the near edge looks bigger as it comes round */
+}
+
+.logo-coin {
+  display: block;
+  position: relative;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: logo-coin 5.5s infinite;
+}
+
+.logo-face {
+  display: block;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* The back face sits on top of the front one, turned around, so it shows when the coin is turned. */
+.logo-face-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+}
+
+@keyframes logo-coin {
+  0%,
+  45.45% {
+    transform: rotateY(0deg);
+    animation-timing-function: cubic-bezier(0.3, 0.45, 0.3, 1); /* gentle start, slow settle */
+  }
+  100% {
+    transform: rotateY(720deg);
+  }
+}
+
+/* Motion off in the menu (which starts from the visitor's system setting): the logo just stays still. */
+html[data-motion='off'] .logo-coin {
+  animation: none;
+}
