@@ -15,8 +15,10 @@
         root.dataset.motion = saved.motion === 'on' || saved.motion === 'off' ? saved.motion : osReduce ? 'off' : 'on'
       } catch (e) {}
     </script>
-    <title>Vicbless Barbershop</title>
-    <meta name="description" content="Book a haircut at Vicbless Barbershop in Baxley, GA. Pick a service, choose a time, done." />
+    <title>Vicbless Barbershop | Barber in Baxley, GA</title>
+    <meta name="description" content="Vicbless Barbershop in Baxley, GA. Men's haircuts, designs, beard and eyebrow work, and kids cuts. Book your time online." />
+    <link rel="canonical" href="https://vicbless.com/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <!-- Icons. The .ico is for old browsers, the .svg for modern ones, the apple one for iPhone home screens. -->
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -37,9 +39,41 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet" />
+    <!-- What Google reads to understand the business (name, address, hours). src/lib/seo.test.js checks it against config.js. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BarberShop",
+        "name": "Vicbless Barbershop",
+        "url": "https://vicbless.com/",
+        "image": "https://vicbless.com/og-image.png",
+        "logo": "https://vicbless.com/icon-512.png",
+        "description": "Barbershop in Baxley, GA. Men's haircuts, designs, beard and eyebrow work, and kids cuts. Book online.",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "656 S Main St, Suite C",
+          "addressLocality": "Baxley",
+          "addressRegion": "GA",
+          "postalCode": "31513",
+          "addressCountry": "US"
+        },
+        "openingHoursSpecification": [
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Tuesday"], "opens": "12:00", "closes": "18:00" },
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Thursday", "Friday"], "opens": "11:00", "closes": "19:00" },
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": "Saturday", "opens": "09:00", "closes": "12:00" },
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": "Saturday", "opens": "12:35", "closes": "17:00" }
+        ],
+        "sameAs": ["https://www.tiktok.com/@vicblesss", "https://www.instagram.com/vicblessss"]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>Vicbless Barbershop, Baxley, GA</h1>
+      <p>Men's haircuts, designs, beard and eyebrow work, and kids cuts. 656 S Main St, Suite C, Baxley, GA 31513.</p>
+      <p>Booking needs JavaScript. Turn it on to book a time online.</p>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

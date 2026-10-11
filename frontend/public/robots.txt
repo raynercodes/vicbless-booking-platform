@@ -1,0 +1,7 @@
+# Vicbless Barbershop. Everything public may be crawled. The API is data, not pages.
+# Vic's dashboard lives behind a "#" address (/#/vic). Search engines never see anything after the "#",
+# so it cannot be listed as a page of its own, and nothing on the public site links to it.
+User-agent: *
+Disallow: /api/
+
+Sitemap: https://vicbless.com/sitemap.xml

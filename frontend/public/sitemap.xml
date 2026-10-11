@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- One page: the booking screen is part of the same page (an address with a "#"), so it is not listed separately. -->
+  <url>
+    <loc>https://vicbless.com/</loc>
+  </url>
+</urlset>

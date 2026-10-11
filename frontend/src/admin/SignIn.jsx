@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import LoopingLogo from './LoopingLogo.jsx'
 import Greeting from './Greeting.jsx'
+import PasswordInput from './PasswordInput.jsx'
 import { API_MODE } from '../lib/mode.js'
 import { signIn } from './adminApi.js'
 
@@ -32,14 +33,12 @@ export default function SignIn({ greeting, onSignedIn }) {
       <form onSubmit={submit} noValidate>
         <div className="field">
           <label htmlFor="admin-password">Password</label>
-          <input
+          <PasswordInput
             id="admin-password"
-            type="password"
-            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            aria-invalid={!!error}
-            aria-describedby="admin-password-error"
+            invalid={!!error}
+            describedBy="admin-password-error"
           />
           <p className="err" id="admin-password-error" role={error ? 'alert' : undefined}>
             {error}
