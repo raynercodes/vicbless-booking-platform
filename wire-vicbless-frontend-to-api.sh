@@ -428,14 +428,26 @@ export async function removeBlock(id) {
 VICBLESS_EOF
 mkdir -p "$STAGE/$(dirname 'admin/realAdminApi.test.js')"
 cat > "$STAGE/admin/realAdminApi.test.js" <<'VICBLESS_EOF'
-// @vitest-environment jsdom
 // The real admin data layer against a pretend fetch: the token, the URLs, and what happens when it expires.
+// Runs in plain Node (no jsdom needed): a tiny in-memory localStorage and a window that can dispatch events stand in.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { addBlock, cancelBooking, getDay, isSignedIn, moveBooking, removeBlock, SIGNED_OUT_EVENT, signIn, signOut } from './realAdminApi.js'
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const errorBody = (code, message) => ({ error: { code, message } })
 let calls
+
+// An in-memory stand-in for the browser's localStorage, and a window that can send and hear events.
+function installBrowserStubs() {
+  const data = new Map()
+  vi.stubGlobal('localStorage', {
+    getItem: (k) => (data.has(k) ? data.get(k) : null),
+    setItem: (k, v) => data.set(k, String(v)),
+    removeItem: (k) => data.delete(k),
+    clear: () => data.clear(),
+  })
+  vi.stubGlobal('window', new EventTarget())
+}
 const stub = (...answers) => {
   const queue = [...answers]
   vi.stubGlobal('fetch', vi.fn(async (url, init) => {
@@ -445,6 +457,7 @@ const stub = (...answers) => {
 }
 
 beforeEach(() => {
+  installBrowserStubs()
   calls = []
   localStorage.clear()
   signOut()
