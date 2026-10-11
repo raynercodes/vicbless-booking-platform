@@ -1,6 +1,6 @@
 -r requirements.txt
 pytest==9.1.1
-httpx==0.28.1
+httpx2==2.13.1
 moto[dynamodb,ssm]==5.2.3
 boto3==1.43.111
 cfn-lint==1.57.2

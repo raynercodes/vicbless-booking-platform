@@ -70,10 +70,19 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Find the backend API (empty if the backend is not deployed yet)
+        id: api
+        run: |
+          DOMAIN=$(aws cloudformation describe-stacks --stack-name vicbless-backend-dev --query "Stacks[0].Outputs[?OutputKey=='ApiDomainName'].OutputValue" --output text 2>/dev/null || true)
+          if [ "$DOMAIN" = "None" ]; then DOMAIN=""; fi
+          echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "API domain: ${DOMAIN:-none yet. Deploy the backend, then run this workflow again}"
       - name: Deploy the hosting stack (does nothing if it is already up to date)
         env:
+          API_DOMAIN: ${{ steps.api.outputs.domain }}
           DEV_DOMAIN: ${{ vars.DEV_DOMAIN }}
           DEV_HOSTED_ZONE_ID: ${{ vars.DEV_HOSTED_ZONE_ID }}
+          DEV_CERTIFICATE_ARN: ${{ vars.DEV_CERTIFICATE_ARN }}
           DEV_PREVIEW_KEY: ${{ secrets.DEV_PREVIEW_KEY }}
         run: |
           aws cloudformation deploy \
@@ -83,7 +92,9 @@ jobs:
               Environment=dev \
               SiteDomain="$DEV_DOMAIN" \
               HostedZoneId="$DEV_HOSTED_ZONE_ID" \
+              CertificateArn="$DEV_CERTIFICATE_ARN" \
               PreviewKey="$DEV_PREVIEW_KEY" \
+              ApiDomainName="$API_DOMAIN" \
             --no-fail-on-empty-changeset
       - name: Publish the site
         run: bash infra/publish-site.sh vicbless-frontend-dev dist
@@ -117,9 +128,17 @@ jobs:
             NOT_FOUND|DELETE_COMPLETE|REVIEW_IN_PROGRESS|ROLLBACK_COMPLETE) echo "type=CREATE" >> "$GITHUB_OUTPUT" ;;
             *) echo "type=UPDATE" >> "$GITHUB_OUTPUT" ;;
           esac
+      - name: Find the backend API (empty if the backend is not deployed yet)
+        id: api
+        run: |
+          DOMAIN=$(aws cloudformation describe-stacks --stack-name vicbless-backend-prod --query "Stacks[0].Outputs[?OutputKey=='ApiDomainName'].OutputValue" --output text 2>/dev/null || true)
+          if [ "$DOMAIN" = "None" ]; then DOMAIN=""; fi
+          echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "API domain: ${DOMAIN:-none yet. Deploy the prod backend first}"
       - name: Create the changeset (applies nothing yet)
         id: create-changeset
         env:
+          API_DOMAIN: ${{ steps.api.outputs.domain }}
           PROD_DOMAIN: ${{ vars.PROD_DOMAIN }}
           PROD_INCLUDE_WWW: ${{ vars.PROD_INCLUDE_WWW }}
           PROD_HOSTED_ZONE_ID: ${{ vars.PROD_HOSTED_ZONE_ID }}
@@ -130,12 +149,14 @@ jobs:
             --arg www "${PROD_INCLUDE_WWW:-false}" \
             --arg zone "$PROD_HOSTED_ZONE_ID" \
             --arg cert "$PROD_CERTIFICATE_ARN" \
+            --arg api "$API_DOMAIN" \
             '[
               {ParameterKey: "Environment", ParameterValue: "prod"},
               {ParameterKey: "SiteDomain", ParameterValue: $domain},
               {ParameterKey: "IncludeWww", ParameterValue: $www},
               {ParameterKey: "HostedZoneId", ParameterValue: $zone},
               {ParameterKey: "CertificateArn", ParameterValue: $cert},
+              {ParameterKey: "ApiDomainName", ParameterValue: $api},
               {ParameterKey: "PreviewKey", ParameterValue: ""}
             ]' > params.json
 

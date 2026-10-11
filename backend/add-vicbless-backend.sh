@@ -2416,7 +2416,7 @@ VICBLESS_EOF
 cat > backend/requirements-dev.txt <<'VICBLESS_EOF'
 -r requirements.txt
 pytest==9.1.1
-httpx==0.28.1
+httpx2==2.13.1
 moto[dynamodb,ssm]==5.2.3
 boto3==1.43.111
 cfn-lint==1.57.2
@@ -2450,7 +2450,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import security  # noqa: E402
+from app.core import security  # noqa: E402
 
 
 def main() -> int:
@@ -2500,6 +2500,7 @@ cat > backend/tests/conftest.py <<'VICBLESS_EOF'
 """Pytest finds fixtures here. They live in tests/fixtures/, one file per topic, and are listed once:
 
     aws, fixed_clock     run around every test automatically (autouse)
+    atomic_transactions  opt-in: the fake database runs one transaction at a time, like the real one
     client, auth         the API, and a signed-in Vic
     sent                 catches outgoing emails
 
@@ -2507,7 +2508,7 @@ Shared test data and shortcuts live in tests/helpers/ (builders, api shortcuts, 
 """
 
 from tests.fixtures.api import admin_setup, auth, client  # noqa: F401
-from tests.fixtures.aws import aws  # noqa: F401
+from tests.fixtures.aws import atomic_transactions, aws  # noqa: F401
 from tests.fixtures.clock import fixed_clock  # noqa: F401
 from tests.fixtures.email import sent  # noqa: F401
 VICBLESS_EOF
@@ -2582,6 +2583,34 @@ def aws(monkeypatch):
         boto3.client("dynamodb").create_table(**table_definition(TEST_TABLE))
         yield
     config.reset_caches()
+
+
+@pytest.fixture
+def atomic_transactions(monkeypatch):
+    """Makes the fake DynamoDB run one transaction at a time, the way the real one behaves.
+
+    A real DynamoDB transaction is atomic: when two people try to claim the same time at once, it checks
+    and writes as ONE step, so exactly one of them wins. moto (the fake) does not guarantee that when several
+    threads call it together, so a concurrency test against it can fail at random (it did: two "winners").
+    This lock gives the fake the guarantee the real service already has. What is still being tested is the
+    app's own part: that it asks for "only if this claim does not exist yet", so the database can decide.
+    """
+    import threading
+
+    from app.database import table
+
+    lock = threading.Lock()
+    real = table.client()
+
+    class OneAtATime:
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def transact_write_items(self, **kwargs):
+            with lock:
+                return real.transact_write_items(**kwargs)
+
+    monkeypatch.setattr(table, "client", lambda: OneAtATime())
 VICBLESS_EOF
 cat > backend/tests/fixtures/clock.py <<'VICBLESS_EOF'
 """A frozen clock."""
@@ -3687,7 +3716,8 @@ def test_availability_ranges_do_not_leak_between_days():
     assert out["2026-10-13"]["busy"] == [720] and out["2026-10-14"]["busy"] == [] and out["2026-10-15"]["busy"] == [660]
 
 
-def test_concurrent_attempts_only_one_wins():
+def test_concurrent_attempts_only_one_wins(atomic_transactions):
+    # Six people try for the same time at the same moment: the database must pick exactly one.
     results = []
     gate = threading.Barrier(6)
 
@@ -3967,6 +3997,67 @@ def test_the_year_ahead_limit_is_inclusive():
         day_bad += timedelta(days=1)
     with pytest.raises(InvalidSlot):
         shop.check_movable(day_bad, shop.grid_starts(day_bad)[0], 35, NOW)
+VICBLESS_EOF
+cat > backend/tests/test_scripts.py <<'VICBLESS_EOF'
+"""The helper script Vic's password is set up with. It runs once, by hand, so a break would only show up on launch day."""
+
+import re
+import runpy
+import shlex
+import sys
+from pathlib import Path
+
+import pytest
+
+from app.core import security
+
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "hash_password.py"
+
+
+def run_script(monkeypatch, capsys, answers, env="dev"):
+    """Runs hash_password.py as if typed at a terminal, answering its two password prompts."""
+    typed = iter(answers)
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": next(typed))
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT), "--env", env])
+    code = None
+    try:
+        runpy.run_path(str(SCRIPT), run_name="__main__")
+    except SystemExit as done:
+        code = done.code
+    return code, capsys.readouterr()
+
+
+def stored_values(output):
+    """{'pepper': ..., 'jwt-secret': ..., 'admin-password-hash': ...} read back out of the printed aws commands."""
+    found = {}
+    for line in output.splitlines():
+        m = re.search(r"--name /vicbless/dev/(pepper|jwt-secret|admin-password-hash) .*--value=(.*)$", line)
+        if m:
+            found[m.group(1)] = shlex.split(m.group(2))[0]
+    return found
+
+
+def test_the_printed_hash_logs_vic_in_with_the_printed_pepper(monkeypatch, capsys):
+    code, out = run_script(monkeypatch, capsys, ["a long dashboard password", "a long dashboard password"])
+    assert code == 0, out.err
+    values = stored_values(out.out)
+    assert set(values) == {"pepper", "jwt-secret", "admin-password-hash"}
+    assert security.verify_password("a long dashboard password", values["admin-password-hash"], values["pepper"])
+    assert not security.verify_password("a different password!", values["admin-password-hash"], values["pepper"])
+    assert values["admin-password-hash"].startswith("pbkdf2_sha256$600000$")  # the real strength, not the fast test one
+
+
+def test_every_run_makes_a_fresh_pepper_and_session_secret(monkeypatch, capsys):
+    _, first = run_script(monkeypatch, capsys, ["a long dashboard password"] * 2)
+    _, second = run_script(monkeypatch, capsys, ["a long dashboard password"] * 2)
+    a, b = stored_values(first.out), stored_values(second.out)
+    assert a["pepper"] != b["pepper"] and a["jwt-secret"] != b["jwt-secret"]
+
+
+@pytest.mark.parametrize("answers", [["short", "short"], ["a long dashboard password", "a different long password"]])
+def test_a_short_or_mistyped_password_prints_nothing_to_store(monkeypatch, capsys, answers):
+    code, out = run_script(monkeypatch, capsys, answers)
+    assert code == 1 and "put-parameter" not in out.out
 VICBLESS_EOF
 cat > backend/tests/test_security.py <<'VICBLESS_EOF'
 import time

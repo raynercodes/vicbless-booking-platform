@@ -1,29 +1,47 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  One-time setup. The role GitHub Actions assumes (through OIDC, no stored keys) to deploy the
-  Vicbless frontend hosting stack and upload the site. Deploy once by hand, in us-east-1.
+  One-time setup. The role GitHub Actions assumes (through OIDC, no stored keys) to deploy the Vicbless
+  frontend hosting stacks, the backend stacks, and to upload the site. Also creates the GitHub sign-in
+  provider when the account does not have one yet. Deploy once by hand, in us-east-1.
 
 Parameters:
   GitHubRepo:
     Type: String
     Default: raynercodes/vicbless-booking-platform
     Description: owner/repo of the GitHub repository. Check it matches yours exactly.
+  CreateOidcProvider:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+    Description: >-
+      true for a brand new AWS account: this stack creates GitHub's sign-in provider. false if the account already has
+      one (an account can only have one), then the existing provider is used.
   OidcProviderArn:
     Type: String
     Default: ''
     Description: >-
-      ARN of the account's GitHub OIDC provider. Leave empty to use the standard one
-      (token.actions.githubusercontent.com), which already exists if another project uses OIDC.
+      Only when CreateOidcProvider is false and the provider is not the standard one: its ARN. Leave empty to use the
+      standard one (token.actions.githubusercontent.com).
 
 Conditions:
+  MakeProvider: !Equals [!Ref CreateOidcProvider, 'true']
   UseStandardProvider: !Equals [!Ref OidcProviderArn, '']
 
 Resources:
+  # GitHub's sign-in provider. Needed once per AWS account. AWS checks GitHub's certificate on its own, so no
+  # thumbprint is needed.
+  GitHubProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: MakeProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
   DeployRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: vicbless-github-actions-role
-      Description: Deploys the Vicbless frontend hosting stack from GitHub Actions
+      Description: Deploys the Vicbless frontend and backend stacks from GitHub Actions
       MaxSessionDuration: 3600
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -31,9 +49,12 @@ Resources:
           - Effect: Allow
             Principal:
               Federated: !If
-                - UseStandardProvider
-                - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
-                - !Ref OidcProviderArn
+                - MakeProvider
+                - !Ref GitHubProvider
+                - !If
+                  - UseStandardProvider
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+                  - !Ref OidcProviderArn
             Action: sts:AssumeRoleWithWebIdentity
             Condition:
               StringEquals:
@@ -119,6 +140,85 @@ Resources:
                   - route53:ListHostedZonesByName
                   - route53:GetChange
                 Resource: '*'
+
+        - PolicyName: vicbless-backend-deploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: BackendStacks
+                Effect: Allow
+                Action: cloudformation:*
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/vicbless-backend-*/*
+              - Sid: SamTransform
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
+              - Sid: PackageUploads
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource:
+                  - arn:aws:s3:::vicbless-artifacts-*
+                  - arn:aws:s3:::vicbless-artifacts-*/*
+              - Sid: ApiFunction
+                Effect: Allow
+                Action: lambda:*
+                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:vicbless-api-*
+              - Sid: HttpApi
+                Effect: Allow
+                Action: apigateway:*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis
+                  - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*
+                  - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/tags/*
+              - Sid: Tables
+                Effect: Allow
+                Action: dynamodb:*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vicbless-*
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/vicbless-*/index/*
+              - Sid: LogGroups
+                Effect: Allow
+                Action: logs:*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/vicbless-api-*
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/vicbless-api-*:*
+              - Sid: LogGroupLookups
+                Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: '*'
+              # The function's own role is created by the backend stack. It is limited to roles named after the
+              # stack, and the only AWS-managed policy it may attach is the basic logging one, so this role can't be
+              # used to mint an administrator.
+              - Sid: FunctionRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PassRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/vicbless-backend-*
+              - Sid: FunctionRoleLogging
+                Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/vicbless-backend-*
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN: !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
 Outputs:
   RoleArn:

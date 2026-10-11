@@ -91,7 +91,8 @@ def test_availability_ranges_do_not_leak_between_days():
     assert out["2026-10-13"]["busy"] == [720] and out["2026-10-14"]["busy"] == [] and out["2026-10-15"]["busy"] == [660]
 
 
-def test_concurrent_attempts_only_one_wins():
+def test_concurrent_attempts_only_one_wins(atomic_transactions):
+    # Six people try for the same time at the same moment: the database must pick exactly one.
     results = []
     gate = threading.Barrier(6)
 

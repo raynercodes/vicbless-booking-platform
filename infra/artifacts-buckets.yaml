@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  One-time setup. The two private buckets the backend deploy uploads its packaged code to (one for dev,
+  one for prod). Deploy once by hand, in us-east-1, before the first backend deploy.
+
+Resources:
+  DevArtifacts:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub vicbless-artifacts-dev-${AWS::AccountId}
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          # Old packages are only needed if a deploy has to roll back, so a year is plenty.
+          - Id: expire-old-packages
+            Status: Enabled
+            ExpirationInDays: 365
+      Tags:
+        - Key: Project
+          Value: vicbless-booking-platform
+
+  ProdArtifacts:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub vicbless-artifacts-prod-${AWS::AccountId}
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-packages
+            Status: Enabled
+            ExpirationInDays: 365
+      Tags:
+        - Key: Project
+          Value: vicbless-booking-platform
+
+Outputs:
+  DevBucket:
+    Value: !Ref DevArtifacts
+  ProdBucket:
+    Value: !Ref ProdArtifacts
