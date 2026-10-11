@@ -153,6 +153,7 @@ Resources:
                   - cloudfront:GetDistribution
                   - cloudfront:GetDistributionConfig
                   - cloudfront:ListDistributions
+                  - cloudfront:ListTagsForResource # CloudFormation reads a function's tags after creating it
                   - cloudfront:TagResource
                   - cloudfront:UntagResource
                   - cloudfront:CreateInvalidation
@@ -168,6 +169,11 @@ Resources:
                   - cloudfront:GetResponseHeadersPolicy
                   - cloudfront:ListResponseHeadersPolicies
                   - cloudfront:GetCachePolicy
+                  - cloudfront:GetCachePolicyConfig
+                  - cloudfront:GetOriginRequestPolicy
+                  - cloudfront:ListOriginRequestPolicies
+                  - cloudfront:GetOriginAccessControlConfig
+                  - cloudfront:GetResponseHeadersPolicyConfig
                   - cloudfront:ListCachePolicies
                   - cloudfront:CreateFunction
                   - cloudfront:UpdateFunction
