@@ -81,3 +81,4 @@ The tests use a fake AWS (moto), and the fake table is created from the real def
 `infra/template.yaml`, so the tests can't pass against a table shape that isn't the deployed one.
 `test_contract.py` reads `frontend/src/config.js` and fails if the hours, services, slot length or
 input limits (name 50, notes 500) there differ from `app/domain/shop.py` and `app/schemas/requests.py`.
+
