@@ -135,6 +135,11 @@ jobs:
           if [ "$DOMAIN" = "None" ]; then DOMAIN=""; fi
           echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
           echo "API domain: ${DOMAIN:-none yet. Deploy the prod backend first}"
+          # Prod must never go live without its API: the booking page would load and then nothing would work.
+          if [ -z "$DOMAIN" ]; then
+            echo "::error::The prod backend is not deployed yet (stack vicbless-backend-prod has no ApiDomainName). Run 'Deploy backend' for prod first, then run this again."
+            exit 1
+          fi
       - name: Create the changeset (applies nothing yet)
         id: create-changeset
         env:
