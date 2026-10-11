@@ -64,6 +64,14 @@ It shows the account number and **makes you type it again**, so you cannot deplo
 Then it creates the GitHub sign-in provider (new accounts have none), the deploy role, and the two buckets the backend
 uploads its code to. It prints the role to copy into GitHub.
 
+**Why it looks up two numbers.** Since July 15, 2026, GitHub puts the numeric IDs of the owner and the repository in the
+sign-in token of every repository created after that date (`repo:owner@ID/name@ID:ref:refs/heads/dev` instead of
+`repo:owner/name:ref:refs/heads/dev`). The bootstrap fetches both IDs from GitHub (the repo is public, no login needed)
+and makes the role trust both forms. If GitHub Actions ever says `Not authorized to perform sts:AssumeRoleWithWebIdentity`,
+the role was deployed without the IDs: run `GITHUB_OWNER_ID=<id> GITHUB_REPO_ID=<id> bash infra/bootstrap.sh`
+(`gh api /users/<owner> --jq .id` and `gh api /repos/<owner>/<repo> --jq .id` print them). Renaming or transferring the
+repo changes the form again, so run the bootstrap again after either.
+
 ## Step 3. GitHub variables and secrets
 
 Settings > Secrets and variables > Actions.

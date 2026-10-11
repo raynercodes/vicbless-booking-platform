@@ -9,6 +9,20 @@ Parameters:
     Type: String
     Default: raynercodes/vicbless-booking-platform
     Description: owner/repo of the GitHub repository. Check it matches yours exactly.
+  GitHubOwnerId:
+    Type: String
+    Default: ''
+    AllowedPattern: '^[0-9]*$'
+    Description: >-
+      Numeric ID of the repository's owner (find it: gh api /users/<owner> --jq .id). GitHub puts it in the sign-in
+      token of repositories created after July 15, 2026. Leave empty to accept only the old name-only format.
+  GitHubRepoId:
+    Type: String
+    Default: ''
+    AllowedPattern: '^[0-9]*$'
+    Description: >-
+      Numeric ID of the repository itself (find it: gh api /repos/<owner>/<repo> --jq .id). Used together with
+      GitHubOwnerId.
   CreateOidcProvider:
     Type: String
     AllowedValues: ['true', 'false']
@@ -26,6 +40,9 @@ Parameters:
 Conditions:
   MakeProvider: !Equals [!Ref CreateOidcProvider, 'true']
   UseStandardProvider: !Equals [!Ref OidcProviderArn, '']
+  HasIds: !And
+    - !Not [!Equals [!Ref GitHubOwnerId, '']]
+    - !Not [!Equals [!Ref GitHubRepoId, '']]
 
 Resources:
   # GitHub's sign-in provider. Needed once per AWS account. AWS checks GitHub's certificate on its own, so no
@@ -61,9 +78,53 @@ Resources:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
                 token.actions.githubusercontent.com:sub:
+                  # Old format (name only): repositories created before July 15, 2026.
                   - !Sub repo:${GitHubRepo}:ref:refs/heads/dev
                   - !Sub repo:${GitHubRepo}:ref:refs/heads/main
                   - !Sub repo:${GitHubRepo}:environment:production
+                  # New format (names plus numeric IDs): repositories created after July 15, 2026.
+                  - !If
+                    - HasIds
+                    - !Join
+                      - ''
+                      - - 'repo:'
+                        - !Select [0, !Split ['/', !Ref GitHubRepo]]
+                        - '@'
+                        - !Ref GitHubOwnerId
+                        - '/'
+                        - !Select [1, !Split ['/', !Ref GitHubRepo]]
+                        - '@'
+                        - !Ref GitHubRepoId
+                        - ':ref:refs/heads/dev'
+                    - !Ref AWS::NoValue
+                  - !If
+                    - HasIds
+                    - !Join
+                      - ''
+                      - - 'repo:'
+                        - !Select [0, !Split ['/', !Ref GitHubRepo]]
+                        - '@'
+                        - !Ref GitHubOwnerId
+                        - '/'
+                        - !Select [1, !Split ['/', !Ref GitHubRepo]]
+                        - '@'
+                        - !Ref GitHubRepoId
+                        - ':ref:refs/heads/main'
+                    - !Ref AWS::NoValue
+                  - !If
+                    - HasIds
+                    - !Join
+                      - ''
+                      - - 'repo:'
+                        - !Select [0, !Split ['/', !Ref GitHubRepo]]
+                        - '@'
+                        - !Ref GitHubOwnerId
+                        - '/'
+                        - !Select [1, !Split ['/', !Ref GitHubRepo]]
+                        - '@'
+                        - !Ref GitHubRepoId
+                        - ':environment:production'
+                    - !Ref AWS::NoValue
       Policies:
         - PolicyName: vicbless-frontend-deploy
           PolicyDocument:
