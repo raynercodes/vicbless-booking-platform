@@ -102,3 +102,8 @@ export const HOME_TAGLINE = ['If you wanna get fresh,', 'come to VicBless']
 // The most a customer may type. The booking form enforces these and shows the notes counter; the API
 // enforces the same numbers, and a backend test fails if the two ever differ.
 export const LIMITS = { name: 50, notes: 500 }
+
+// Which comes first on the home page, a TEST for Vic (change this one word to compare the two looks):
+//   'photo-first'  the photo section (headline, paragraph, stacked words) is the first thing under the logo, then the video
+//   'video-first'  the video first, then the photo section (how it was)
+export const HOME_ORDER = 'photo-first'

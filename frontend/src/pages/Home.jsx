@@ -5,7 +5,7 @@ import ShopInfo from '../components/ShopInfo.jsx'
 import Statement from '../components/Statement.jsx'
 import { useSettings } from '../lib/useSettings.js'
 import Socials from '../components/Socials.jsx'
-import { CTA_TEXT, HOME_TAGLINE } from '../config.js'
+import { CTA_TEXT, HOME_ORDER, HOME_TAGLINE } from '../config.js'
 
 const PlayIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
@@ -18,6 +18,9 @@ const PauseIcon = () => (
     <path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor" />
   </svg>
 )
+
+// Which comes first: the photo section or the video (HOME_ORDER in config.js).
+const PHOTO_FIRST = HOME_ORDER === 'photo-first'
 
 // The pan finishes after the visitor has scrolled 85% of the video's height,
 // so the movement reads as stronger and faster.
@@ -81,7 +84,11 @@ export default function Home() {
     const update = () => {
       frame = 0
       const h = hero.offsetHeight || 1
-      const p = Math.min(1, Math.max(0, window.scrollY / (h * PAN_DISTANCE)))
+      // The pan starts once the video has scrolled up to where it rests under the logo bar. With the video first
+      // that is the very top of the page (start = 0); with the photo first it is the height of the photo section.
+      const main = hero.parentElement
+      const start = main ? hero.getBoundingClientRect().top - main.getBoundingClientRect().top : 0
+      const p = Math.min(1, Math.max(0, (window.scrollY - start) / (h * PAN_DISTANCE)))
       hero.style.setProperty('--pan', p.toFixed(3))
     }
     const onScroll = () => {
@@ -110,6 +117,8 @@ export default function Home() {
       <SiteHeader />
 
       <main>
+        {PHOTO_FIRST && <Statement />}
+
         <section ref={heroRef} className="hero" aria-label="Vicbless presentation">
           <img className="hero-backdrop" src="/media/vicbless-poster.jpg" alt="" aria-hidden="true" />
           <video
@@ -159,7 +168,7 @@ export default function Home() {
           </button>
         </section>
 
-        <Statement />
+        {!PHOTO_FIRST && <Statement />}
 
         <ShopInfo />
       </main>
