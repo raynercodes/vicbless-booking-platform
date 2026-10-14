@@ -18,10 +18,32 @@ def block(text: str, start: str, end: str) -> str:
     return text[i : text.index(end, i)]
 
 
-def test_slot_minutes_and_days_ahead():
+def test_days_ahead():
+    assert int(re.search(r"export const DAYS_AHEAD = (\d+)", source()).group(1)) == shop.DAYS_AHEAD
+
+
+def test_slot_limits_match():
+    """The dashboard's appointment-length picker offers exactly the lengths the API accepts."""
     text = source()
-    assert int(re.search(r"export const SLOT_MINUTES = (\d+)", text).group(1)) == shop.SLOT_MINUTES
-    assert int(re.search(r"export const DAYS_AHEAD = (\d+)", text).group(1)) == shop.DAYS_AHEAD
+    found = {name: int(n) for name, n in re.findall(r"export const (SLOT_MIN|SLOT_MAX|SLOT_STEP|MAX_SERVICES) = (\d+)", text)}
+    assert found == {
+        "SLOT_MIN": shop.MIN_SLOT_MINUTES,
+        "SLOT_MAX": shop.MAX_SLOT_MINUTES,
+        "SLOT_STEP": shop.UNIT_MINUTES,
+        "MAX_SERVICES": shop.MAX_SERVICES,
+    }
+
+
+def test_default_slot_lengths_match():
+    """The site starts from the same appointment lengths as the backend (Monday and Tuesday 45, the rest 35)."""
+    from tests.fixtures.settings import REAL_DEFAULTS
+
+    body = block(source(), "export const SLOT_MINUTES_BY_DAY = {", "}")
+    js = {int(day): int(minutes) for day, minutes in re.findall(r"(\d):\s*(\d+)", body)}
+    assert set(js) == set(range(7))
+    for js_day, minutes in js.items():
+        py_day = (js_day - 1) % 7  # JavaScript: Sunday = 0. Python: Monday = 0.
+        assert REAL_DEFAULTS.slot_minutes[py_day] == minutes, f"JS day {js_day}"
 
 
 def test_staff():
@@ -41,11 +63,36 @@ def test_hours_match():
         assert shop.HOURS[py_day] == expected, f"JS day {js_day}"
 
 
-def test_services_match():
+STRING = r"""(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")"""
+
+
+def js_string(match_tuple) -> str:
+    """Whichever of the two quote styles matched."""
+    return match_tuple[0] or match_tuple[1]
+
+
+def test_default_services_match():
+    """The services the site starts with (before the API answers) are the backend's starting services, in the same order."""
+    from tests.fixtures.settings import REAL_DEFAULTS
+
     body = block(source(), "export const SERVICES = [", "\n]")
-    found = {sid: int(minutes) for sid, minutes in re.findall(r"id:\s*'([^']+)'.*?minutes:\s*(\d+)", body, re.S)}
+    found = []
+    for obj in re.findall(r"\{[^{}]*\}", body):
+        sid = re.search(r"id:\s*" + STRING, obj)
+        name = re.search(r"name:\s*" + STRING, obj)
+        price = re.search(r"price:\s*(\d+)", obj)
+        note = re.search(r"note:\s*" + STRING, obj)
+        found.append(
+            (
+                js_string(sid.groups()),
+                js_string(name.groups()),
+                int(price.group(1)),
+                "from: true" in obj,
+                js_string(note.groups()) if note else "",
+            )
+        )
     assert found, "No services found in the frontend config"
-    assert found == {s.id: s.minutes for s in shop.SERVICES.values()}
+    assert found == [(s.id, s.name, s.price, s.from_price, s.note) for s in REAL_DEFAULTS.services]
 
 
 def test_input_limits_match():
@@ -55,3 +102,29 @@ def test_input_limits_match():
     match = re.search(r"export const LIMITS = \{\s*name:\s*(\d+),\s*notes:\s*(\d+)\s*\}", source())
     assert match, "frontend/src/config.js has no LIMITS yet. Run update-vicbless-notes-counter.sh (from inside frontend/) first."
     assert (int(match.group(1)), int(match.group(2))) == (requests.NAME_MAX, requests.NOTES_MAX)
+
+
+def test_contact_email_matches():
+    """The email customers are told to write to is the same on the site and in the emails and error messages."""
+    from app.core.brand import CONTACT_EMAIL
+
+    match = re.search(r"email:\s*'([^']+)'", block(source(), "export const BUSINESS", "\n}"))
+    assert match and match.group(1) == CONTACT_EMAIL
+
+
+def test_reminder_choices_and_defaults_match_the_site():
+    """The dashboard offers the same reminder times the API accepts, and starts from the same ones."""
+    text = source()
+    choices = re.search(r"export const REMINDER_CHOICES = \[([\d,\s]+)\]", text)
+    default = re.search(r"export const REMINDER_HOURS_DEFAULT = \[([\d,\s]+)\]", text)
+    assert choices and default, "frontend/src/config.js is missing REMINDER_CHOICES or REMINDER_HOURS_DEFAULT"
+    as_ints = lambda m: tuple(int(n) for n in re.findall(r"\d+", m.group(1)))  # noqa: E731
+    assert sorted(as_ints(choices)) == sorted(shop.REMINDER_CHOICES)
+    assert as_ints(default) == shop.DEFAULT_SETTINGS.reminder_hours
+
+
+def test_the_consent_line_on_the_booking_form_says_what_carriers_expect():
+    text = source()
+    line = re.search(r"export const SMS_CONSENT = '([^']+)'", text)
+    assert line, "frontend/src/config.js has no SMS_CONSENT"
+    assert "Msg & data rates may apply" in line.group(1) and "Reply STOP to opt out" in line.group(1)

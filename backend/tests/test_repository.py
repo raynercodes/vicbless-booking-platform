@@ -8,6 +8,7 @@ from app.database import blocks as blocks_db
 from app.database import bookings as bookings_db
 from app.database import login_attempts
 from app.database import schedule as schedule_db
+from app.domain import shop
 from tests.helpers.aws import raw_table
 from tests.helpers.builders import make_booking as make
 from tests.helpers.builders import taken_blocks as claims
@@ -87,7 +88,7 @@ def test_block_and_booking_conflict_both_ways():
 def test_availability_ranges_do_not_leak_between_days():
     make(day=TUE)
     make(start=660, day=date(2026, 10, 15))
-    out = schedule_db.availability(TUE, date(2026, 10, 15))
+    out = schedule_db.availability(TUE, date(2026, 10, 15), shop.DEFAULT_SETTINGS)
     assert out["2026-10-13"]["busy"] == [720] and out["2026-10-14"]["busy"] == [] and out["2026-10-15"]["busy"] == [660]
 
 

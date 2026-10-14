@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import PhoneLink from '../components/PhoneLink.jsx'
+import EmailLink from '../components/EmailLink.jsx'
 import Reveal from '../components/Reveal.jsx'
-import { DAYS_AHEAD, HOURS, LIMITS, SERVICES, SLOT_MINUTES, STAFF, SUCCESS_HEADLINE } from '../config.js'
+import { DAYS_AHEAD, HOURS, LIMITS, SMS_CONSENT, STAFF, SUCCESS_HEADLINE } from '../config.js'
 import { fmtTime, fromKey, keyOf, slotsForDay, startsForDay } from '../lib/availability.js'
 import { createBooking, getAvailability, SlotTakenError } from '../lib/api.js'
 import { countLabel, nearLimit, priceLabel, serviceIdFromHash } from '../lib/format.js'
+import { slotFor } from '../lib/shopSettings.js'
+import { useShopSettings } from '../lib/useShopSettings.js'
 
 const STEPS = ['Service', 'Time', 'Details']
 const REFRESH_MS = 30000 // how often the time grid re-checks while it is open
@@ -36,6 +38,9 @@ function dayLabel(d) {
 export default function Book() {
   const days = useMemo(buildDays, [])
   const staff = STAFF[0]
+  // Vic's services and how long an appointment is on each weekday (he edits both in his dashboard).
+  const shop = useShopSettings()
+  const SERVICES = shop.services
 
   // For each day: the taken times, and whether the whole day is off.
   const [availability, setAvailability] = useState(null)
@@ -45,12 +50,12 @@ export default function Book() {
   )
   const [loadError, setLoadError] = useState(false)
   // A service link on the home page (#/book?service=mens-design) arrives with the service chosen.
-  const [preselected] = useState(() => serviceIdFromHash(window.location.hash, SERVICES))
+  const [preselected] = useState(() => serviceIdFromHash(window.location.hash, shop.services))
   const [step, setStep] = useState(preselected ? 1 : 0)
   const [serviceId, setServiceId] = useState(preselected)
   const [dateKey, setDateKey] = useState(null)
   const [time, setTime] = useState(null)
-  const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' })
+  const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '', sms: false })
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [notice, setNotice] = useState('')
@@ -97,15 +102,15 @@ export default function Book() {
       const k = keyOf(d)
       out[k] = slotsForDay({
         date: d,
-        minutes: service.minutes,
+        minutes: slotFor(shop, d),
         hours: HOURS,
         busy: busy[k] || [],
         now,
-        slotMinutes: SLOT_MINUTES,
+        slotMinutes: slotFor(shop, d),
       })
     }
     return out
-  }, [busy, service, days])
+  }, [busy, service, days, shop])
 
   // Preselect the first day that has openings when the time step opens.
   useEffect(() => {
@@ -132,7 +137,8 @@ export default function Book() {
   }
 
   function updateField(e) {
-    setForm((f) => ({ ...f, [e.target.name]: e.target.value }))
+    const { name, type, checked, value } = e.target
+    setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }))
   }
 
   async function submit(e) {
@@ -152,11 +158,12 @@ export default function Book() {
         serviceId: service.id,
         dateKey,
         start: time,
-        minutes: service.minutes,
+        minutes: slotFor(shop, fromKey(dateKey)),
         name: form.name.trim(),
         phone: form.phone.trim(),
         email: form.email.trim(),
         notes: form.notes.trim(),
+        smsConsent: form.sms,
       })
       setDone(booking)
     } catch (ex) {
@@ -172,7 +179,7 @@ export default function Book() {
             ex.message
           ) : (
             <>
-              Something went wrong saving your booking. Try again, or call <PhoneLink />.
+              Something went wrong saving your booking. Try again, or email <EmailLink />.
             </>
           ),
         )
@@ -183,7 +190,9 @@ export default function Book() {
   }
 
   if (done) {
-    const booked = SERVICES.find((s) => s.id === done.serviceId)
+    // the booking remembers the name it was made with; the price comes from the current list when it is still there
+    const current = SERVICES.find((s) => s.id === done.serviceId)
+    const booked = { ...(current || { price: 0 }), name: done.serviceName || (current && current.name) || 'Appointment' }
     return (
       <main className="book book-done">
         <section className="done" aria-live="polite">
@@ -198,9 +207,9 @@ export default function Book() {
           <p>
             {dayLabel(fromKey(done.dateKey))} at {fmtTime(done.start)}
           </p>
-          <p>{payLine(booked)}</p>
+          {current && <p>{payLine(booked)}</p>}
           <p className="muted">
-            Need to change it? Call <PhoneLink /> and quote your code.
+            Need to change it? Email <EmailLink /> and quote your code.
           </p>
           <a className="btn btn-primary" href="#/">Back to home</a>
         </section>
@@ -213,7 +222,7 @@ export default function Book() {
   const openTimes = new Set(daySlots)
   const dayStarts =
     selectedDay && service
-      ? startsForDay({ date: selectedDay, minutes: service.minutes, hours: HOURS, slotMinutes: SLOT_MINUTES })
+      ? startsForDay({ date: selectedDay, minutes: slotFor(shop, selectedDay), hours: HOURS, slotMinutes: slotFor(shop, selectedDay) })
       : []
 
   return (
@@ -261,7 +270,6 @@ export default function Book() {
               onClick={() => chooseService(s.id)}
             >
               <span className="name">{s.name}</span>
-              <span className="meta">{s.minutes} min</span>
               <span className="leader" />
               <span className="price">{priceLabel(s)}</span>
               {s.note && <span className="note">{s.note}</span>}
@@ -349,7 +357,7 @@ export default function Book() {
             <div>
               <dt>Service</dt>
               <dd>
-                {service.name} ({service.minutes} min), {priceLabel(service)}
+                {service.name} ({slotFor(shop, fromKey(dateKey))} min), {priceLabel(service)}
               </dd>
             </div>
             <div>
@@ -370,6 +378,10 @@ export default function Book() {
               <label htmlFor="f-phone">Mobile number</label>
               <input id="f-phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={updateField} aria-invalid={!!errors.phone} aria-describedby="e-phone" />
               <p className="err" id="e-phone">{errors.phone}</p>
+              <label className="consent" htmlFor="f-sms">
+                <input id="f-sms" name="sms" type="checkbox" checked={form.sms} onChange={updateField} />
+                <span>{SMS_CONSENT}</span>
+              </label>
             </div>
             <div className="field">
               <label htmlFor="f-email">

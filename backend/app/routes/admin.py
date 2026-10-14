@@ -12,9 +12,10 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from ..domain import shop
-from ..schemas.requests import BlockIn, LoginIn, MoveIn, date_from_query
+from ..schemas.requests import BlockIn, LoginIn, MoveIn, SettingsIn, date_from_query
 from ..services import auth, blocks, bookings, notifications
 from ..services import schedule as schedule_service
+from ..services import settings as settings_service
 from .deps import require_admin, source_address
 
 login_router = APIRouter()
@@ -50,6 +51,19 @@ def move_booking(booking_id: str, body: MoveIn) -> dict:
     before, after = bookings.move_booking(booking_id, body, shop.now_local())
     notifications.booking_moved(before, after)
     return after.admin_view()
+
+
+@router.get("/settings")
+def get_settings() -> dict:
+    """Vic's settings as he last saved them (or the shop's defaults), read fresh from the database."""
+    settings_service.reset_cache()
+    return settings_service.to_view(settings_service.current())
+
+
+@router.put("/settings")
+def put_settings(body: SettingsIn) -> dict:
+    """Saves the services and appointment lengths. Takes effect for new bookings at once; existing ones keep their times."""
+    return settings_service.to_view(settings_service.save(body))
 
 
 @router.post("/blocks")

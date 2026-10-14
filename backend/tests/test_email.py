@@ -35,6 +35,34 @@ def test_owner_notification_replies_go_to_the_customer():
     assert templates.owner_notification(booking_model(email=""), "vic@example.com").reply_to == ""
 
 
+def all_emails():
+    """One of every email the app can send, so a rule about emails is checked against all of them."""
+    before, after = booking_model(), booking_model(start=12 * 60 + 35)
+    return [
+        templates.customer_confirmation(before, "vic@example.com"),
+        templates.owner_notification(before, "vic@example.com"),
+        templates.customer_cancellation(before, "vic@example.com"),
+        templates.customer_rescheduled(before, after, "vic@example.com"),
+    ]
+
+
+def test_every_email_ends_with_the_shop_brand():
+    """Vic asked for his brand at the end of the emails. Both the HTML and the plain-text version carry it."""
+    for msg in all_emails():
+        assert "VICBLESS BARBERSHOP" in msg.html and "VICBLESS BARBERSHOP" in msg.text
+        assert "656 S Main St, Suite C" in msg.html and "Baxley, GA 31513" in msg.text
+        assert 'href="mailto:vicslegacy89@gmail.com"' in msg.html
+        # the brand is the last thing in the email, not buried in the middle
+        assert msg.text.rstrip().endswith("vicslegacy89@gmail.com")
+        assert msg.html.rstrip().endswith("</table></div>")
+
+
+def test_emails_point_customers_to_the_contact_email_not_a_phone():
+    for msg in all_emails():
+        assert "call Vic" not in msg.text and "call Vic" not in msg.html and "tel:" not in msg.html
+    assert "vicslegacy89@gmail.com and quote your code" in templates.customer_confirmation(booking_model(), "v@example.com").text
+
+
 class FakeResponse:
     def __enter__(self):
         return self

@@ -35,8 +35,8 @@ def get_block(block_id: str) -> Block | None:
 
 
 def create_block(*, day: date, claims: list[int], start: int, end: int, note: str, whole: bool) -> Block:
-    # Same trick as a booking: claim every covered block in one transaction. If a booking or another
-    # block-off already holds one of them, nothing is written and Vic gets a Conflict.
+    # Same trick as a booking: claim every covered 5 minute unit together with the block itself. If a booking or
+    # another block-off already holds one of them, nothing is written and Vic gets a Conflict.
     block_id = new_id(day, claims[0])
     item = {
         "pk": PK,
@@ -49,19 +49,19 @@ def create_block(*, day: date, claims: list[int], start: int, end: int, note: st
         "note": note,
         "whole": whole,
         "blocks": claims,
+        "units": True,  # claims are 5 minute units (see scripts/migrate_unit_claims.py for older items)
         "expiresAt": keys.expires(day),
     }
-    transaction = [
-        {
-            "Put": {
-                "TableName": table.table_name(),
-                "Item": item,
-                "ConditionExpression": "attribute_not_exists(pk)",
-            }
+    put_item = {
+        "Put": {
+            "TableName": table.table_name(),
+            "Item": item,
+            "ConditionExpression": "attribute_not_exists(pk)",
         }
-    ] + [transactions.claim_put(day, s, block_id) for s in claims]
+    }
     try:
-        transactions.write_all_or_nothing(transaction)
+        # One transaction normally; a very long block (a whole Saturday has over a hundred units) is split by write_claimed.
+        transactions.write_claimed(put_item, day, claims, block_id)
     except SlotTaken:
         raise Conflict() from None
     return block_from(item)
@@ -71,17 +71,15 @@ def delete_block(block_id: str) -> Block:
     block = get_block(block_id)
     if not block:
         raise NotFound("That blocked time was not found. It may already be removed.")
-    transaction = [
-        {
-            "Delete": {
-                "TableName": table.table_name(),
-                "Key": {"pk": PK, "sk": keys.block_sk(block.day, block.claims[0], block.id)},
-                "ConditionExpression": "attribute_exists(pk)",
-            }
+    delete_item = {
+        "Delete": {
+            "TableName": table.table_name(),
+            "Key": {"pk": PK, "sk": keys.block_sk(block.day, block.claims[0], block.id)},
+            "ConditionExpression": "attribute_exists(pk)",
         }
-    ] + [transactions.claim_delete(block.day, s, block.id) for s in block.claims]
+    }
     try:
-        table.client().transact_write_items(TransactItems=transaction)
+        transactions.delete_claimed(delete_item, block.day, list(block.claims), block.id)
     except ClientError as err:
         if err.response.get("Error", {}).get("Code") == "TransactionCanceledException":
             if get_block(block_id) is None:

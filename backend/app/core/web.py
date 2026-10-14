@@ -42,7 +42,8 @@ def error_response(status: int, code: str, message: str, **extra) -> JSONRespons
 def add_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError):
-        return error_response(exc.status, exc.code, exc.message)
+        extra = {"field": exc.field} if exc.field else {}
+        return error_response(exc.status, exc.code, exc.message, **extra)
 
     @app.exception_handler(RequestValidationError)
     async def _invalid(_: Request, exc: RequestValidationError):
@@ -72,7 +73,7 @@ def add_middleware(app: FastAPI) -> None:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=list(origins),
-            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Authorization", "Content-Type"],
             allow_credentials=False,
             max_age=600,

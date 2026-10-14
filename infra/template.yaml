@@ -91,6 +91,7 @@ Resources:
           TABLE_NAME: !Ref Table
           CORS_ALLOWED_ORIGINS: !Ref CorsAllowedOrigins
           EMAIL_PROVIDER: resend
+          SMS_PROVIDER: textbelt
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -126,6 +127,12 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /api/{proxy+}
             Method: ANY
+        # Every 15 minutes the same function checks for appointments that are due a reminder (services/reminders.py).
+        Reminders:
+          Type: Schedule
+          Properties:
+            Schedule: rate(15 minutes)
+            Description: Send appointment reminders that are due
 
 Outputs:
   ApiUrl:

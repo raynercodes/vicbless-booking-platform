@@ -8,7 +8,7 @@ from app.core.errors import InvalidSlot, SlotTaken
 from app.database import bookings as bookings_db
 from app.domain import shop
 from tests.helpers.api import book, busy, schedule_of
-from tests.helpers.builders import make_booking, taken_blocks
+from tests.helpers.builders import make_booking, taken_blocks, taken_units
 from tests.helpers.constants import NOW, SATURDAY, TUESDAY, WEDNESDAY
 
 THURSDAY = "2026-10-15"  # open 11:00 am to 7:00 pm
@@ -175,9 +175,9 @@ def test_moving_does_not_change_how_many_upcoming_bookings_a_phone_has(client, a
 
 def test_a_long_booking_moved_by_one_block_keeps_the_shared_block():
     booking = make_booking(start=720, minutes=70)  # holds 12:00 and 12:35
-    assert taken_blocks() == [720, 755]
-    moved = bookings_db.move_booking(booking, day=booking.day, start=755)  # now 12:35 and 1:10
-    assert taken_blocks() == [755, 790]
+    assert taken_blocks() == [720, 755] and len(taken_units()) == 14  # 70 minutes = fourteen 5 minute units
+    moved = bookings_db.move_booking(booking, day=booking.day, start=755, minutes=70)  # now 12:35 to 1:45
+    assert taken_blocks() == [755, 790] and taken_units() == list(range(755, 825, 5))
     assert moved.id != booking.id and moved.code == booking.code
     assert bookings_db.get_booking(moved.id) is not None and bookings_db.get_booking(booking.id) is None
     # the shared block now belongs to the NEW booking, so cancelling it releases everything (a stale owner would block this)
@@ -189,7 +189,7 @@ def test_a_refused_move_changes_nothing_even_when_the_blocks_overlap_the_old_tim
     booking = make_booking(start=720, minutes=70)
     make_booking(start=790, phone="5550102222")  # someone else holds 1:10 pm
     with pytest.raises(SlotTaken):
-        bookings_db.move_booking(booking, day=booking.day, start=755)  # would need 12:35 and 1:10
+        bookings_db.move_booking(booking, day=booking.day, start=755, minutes=70)  # would run into 1:10 pm
     assert taken_blocks() == [720, 755, 790]
     assert bookings_db.get_booking(booking.id) is not None
 
@@ -200,7 +200,7 @@ def test_moving_a_booking_that_was_just_cancelled_is_not_found():
     booking = make_booking()
     bookings_db.cancel_booking(booking.id)
     with pytest.raises(NotFound):
-        bookings_db.move_booking(booking, day=booking.day, start=755)
+        bookings_db.move_booking(booking, day=booking.day, start=755, minutes=35)
     assert taken_blocks() == []  # the move must not have created anything
 
 
@@ -208,7 +208,7 @@ def test_moved_items_carry_the_new_ttl_and_phone_index_keys():
     from tests.helpers.aws import raw_table
 
     booking = make_booking(phone="5550101234")
-    moved = bookings_db.move_booking(booking, day=date(2026, 10, 15), start=660)
+    moved = bookings_db.move_booking(booking, day=date(2026, 10, 15), start=660, minutes=35)
     items = [i for i in raw_table().scan()["Items"] if i["sk"].split("#")[1] == "BOOKING"]
     assert [i["id"] for i in items] == [moved.id]
     assert items[0]["gsi1sk"] == "2026-10-15#1100" and items[0]["gsi1pk"] == "PHONE#5550101234"
@@ -235,9 +235,9 @@ def test_the_year_ahead_limit_is_inclusive():
     day_ok = last
     while not shop.is_open(day_ok):
         day_ok -= timedelta(days=1)
-    shop.check_movable(day_ok, shop.grid_starts(day_ok)[0], 35, NOW)
+    shop.check_movable(day_ok, shop.grid_starts(day_ok, 35)[0], 35, NOW)
     day_bad = last + timedelta(days=1)
     while not shop.is_open(day_bad):
         day_bad += timedelta(days=1)
     with pytest.raises(InvalidSlot):
-        shop.check_movable(day_bad, shop.grid_starts(day_bad)[0], 35, NOW)
+        shop.check_movable(day_bad, shop.grid_starts(day_bad, 35)[0], 35, NOW)

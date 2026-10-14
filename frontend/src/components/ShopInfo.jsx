@@ -1,8 +1,9 @@
-import PhoneLink from './PhoneLink.jsx'
+import EmailLink from './EmailLink.jsx'
 import Reveal from './Reveal.jsx'
-import { BUSINESS, CTA_TEXT, HOURS, SERVICES } from '../config.js'
+import { BUSINESS, CTA_TEXT, HOURS } from '../config.js'
 import { fmtTime } from '../lib/availability.js'
 import { priceLabel } from '../lib/format.js'
+import { useShopSettings } from '../lib/useShopSettings.js'
 
 // Monday first, the way people read a week.
 const DAYS = [
@@ -16,22 +17,22 @@ const DAYS = [
 ]
 
 export default function ShopInfo() {
+  // The services and prices are Vic's own (he edits them in his dashboard).
+  const { services } = useShopSettings()
   return (
     <section className="info" aria-label="Services and hours">
       <div className="info-grid">
         <div>
           <Reveal as="h2">Services</Reveal>
           <ul className="menu">
-            {SERVICES.map((s, i) => (
+            {services.map((s, i) => (
               <Reveal as="li" key={s.id} delay={i * 80}>
                 <div className="menu-row">
                   <span className="menu-name">{s.name}</span>
                   <span className="menu-leader" />
                   <span className="menu-price">{priceLabel(s)}</span>
                 </div>
-                <p className="menu-meta">
-                  {s.minutes} min{s.note ? `. ${s.note}` : ''}
-                </p>
+                {s.note && <p className="menu-meta">{s.note}</p>}
                 <a className="svc-cta" href={`#/book?service=${s.id}`}>
                   {CTA_TEXT}
                 </a>
@@ -64,7 +65,7 @@ export default function ShopInfo() {
                 <br />
               </span>
             ))}
-            <PhoneLink />
+            <EmailLink />
           </Reveal>
         </div>
       </div>

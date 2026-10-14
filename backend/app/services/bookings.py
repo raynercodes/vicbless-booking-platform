@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from ..core.brand import CONTACT_EMAIL
 from ..core.errors import NotFound, SlotTaken, TooManyBookings, ValidationFailed
 from ..database import bookings as bookings_db
 from ..database import schedule
 from ..domain import shop
 from ..domain.models import Booking, new_code
-from ..schemas.requests import BookingIn, MoveIn, parse_date_key
+from ..schemas.requests import MSG_SERVICE, BookingIn, MoveIn, parse_date_key
+from . import settings as settings_service
 
 # Anti-spam: one phone number can hold at most this many upcoming bookings at a time.
 MAX_UPCOMING_PER_PHONE = 3
@@ -26,7 +28,7 @@ def get_availability(first: date, last: date) -> dict[str, dict]:
         raise ValidationFailed("The end date can't be before the start date.")
     if (last - first).days + 1 > shop.MAX_RANGE_DAYS:
         raise ValidationFailed(f"Please ask for {shop.MAX_RANGE_DAYS} days or fewer at a time.")
-    return schedule.availability(first, last)
+    return schedule.availability(first, last, settings_service.current())
 
 
 def _same_request(existing: Booking | None, data: BookingIn, day: date) -> Booking | None:
@@ -52,12 +54,16 @@ def create_booking(data: BookingIn, now: datetime) -> tuple[Booking, bool]:
     """Books the time. Returns (booking, created); created is False when this exact request had already succeeded.
 
     Order matters:
-      1. is it a time Vic could ever take, and is it open right now?  (shop rules, no database)
+      1. is it a service Vic offers, a time he could ever take, and is it open right now?  (shop rules)
       2. does this phone number already hold too many upcoming bookings?  (anti-spam)
       3. try to claim the time. The database refuses if anyone got there first.
     """
     day = parse_date_key(data.dateKey)
-    minutes = shop.SERVICES[data.serviceId].minutes  # the length comes from the service, never from the client
+    settings = settings_service.current()
+    service = settings.service(data.serviceId)
+    if service is None:  # Vic may have removed it since the page was loaded
+        raise ValidationFailed(MSG_SERVICE, field="serviceId")
+    minutes = settings.slot_for(day)  # the length is the day's setting, never something the client sends
     shop.check_bookable(day, data.start, minutes, now)
 
     def earlier_attempt() -> Booking | None:
@@ -71,19 +77,21 @@ def create_booking(data: BookingIn, now: datetime) -> tuple[Booking, bool]:
             return replay, False
         raise TooManyBookings(
             f"This phone number already has {MAX_UPCOMING_PER_PHONE} upcoming bookings, which is the most we allow. "
-            "Please call or text Vic if you need to change one."
+            f"Please email Vic at {CONTACT_EMAIL} if you need to change one."
         )
     try:
         booking = bookings_db.create_booking(
             day=day,
             start=data.start,
             service_id=data.serviceId,
+            service_name=service.name,
             minutes=minutes,
             name=data.name,
             phone=data.phone,
             email=data.email or "",
             notes=data.notes or "",
             code=new_code(),
+            sms_consent=data.smsConsent,
         )
     except SlotTaken:
         # Someone holds the time. If that someone is this very request (a retry), hand it back.
@@ -110,6 +118,7 @@ def move_booking(booking_id: str, data: MoveIn, now: datetime) -> tuple[Booking,
     day = parse_date_key(data.dateKey)
     if (day, data.start) == (before.day, before.start):
         raise ValidationFailed("That booking is already at that time. Pick a different one.")
-    shop.check_movable(day, data.start, before.minutes, now)
-    after = bookings_db.move_booking(before, day=day, start=data.start)  # raises SlotTaken if the time is not free
+    minutes = settings_service.current().slot_for(day)  # the booking takes the new day's appointment length
+    shop.check_movable(day, data.start, minutes, now)
+    after = bookings_db.move_booking(before, day=day, start=data.start, minutes=minutes)  # raises SlotTaken if not free
     return before, after

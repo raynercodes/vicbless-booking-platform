@@ -1,7 +1,9 @@
 import { useEffect, useId, useMemo, useState } from 'react'
-import { HOURS, SERVICES, SLOT_MINUTES } from '../config.js'
+import { HOURS } from '../config.js'
 import { getAvailability } from '../lib/api.js'
-import { fmtTime, fromKey, keyOf } from '../lib/availability.js'
+import { fmtTime, fromKey, keyOf, slotStarts } from '../lib/availability.js'
+import { findService, slotFor } from '../lib/shopSettings.js'
+import { useShopSettings } from '../lib/useShopSettings.js'
 import { moveBooking } from './adminApi.js'
 import { moveDateRange, moveOptions, ownStarts } from './moveTimes.js'
 
@@ -20,7 +22,9 @@ export default function MoveBooking({ item, onClose, onMoved }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const service = SERVICES.find((s) => s.id === item.serviceId)
+  const shop = useShopSettings()
+  const service = findService(shop, item.serviceId)
+  const serviceName = item.serviceName || (service ? service.name : 'Appointment')
   const sameDay = dateKey === item.dateKey
 
   // Look up the chosen day's taken times. A newer choice cancels the answer to an older one.
@@ -39,17 +43,20 @@ export default function MoveBooking({ item, onClose, onMoved }) {
   const options = useMemo(() => {
     if (day.status !== 'ready') return []
     const now = new Date()
+    // The booking takes the appointment length of the day it is moved to (the API does the same).
+    const date = fromKey(dateKey)
+    const slot = slotFor(shop, date)
     return moveOptions({
-      date: fromKey(dateKey),
+      date,
       hours: HOURS,
-      slotMinutes: SLOT_MINUTES,
-      minutes: item.minutes,
+      slotMinutes: slot,
+      minutes: slot,
       busy: day.busy,
-      own: sameDay ? ownStarts(item, SLOT_MINUTES) : [],
+      own: sameDay ? ownStarts(item, slot, slotStarts(date, HOURS, slot)) : [],
       current: sameDay ? item.start : null,
       nowMinutes: dateKey === keyOf(now) ? now.getHours() * 60 + now.getMinutes() : null,
     })
-  }, [day, dateKey, item, sameDay])
+  }, [day, dateKey, item, sameDay, shop])
 
   const anyFree = options.some((o) => o.state === 'free')
 
@@ -85,7 +92,7 @@ export default function MoveBooking({ item, onClose, onMoved }) {
     <form className="admin-block-form admin-move-form" onSubmit={submit} noValidate aria-label={`Change ${item.name}'s time`}>
       <h3>Change time</h3>
       <p className="admin-meta">
-        {item.name}, {service ? service.name : 'Appointment'}. Now: {dayLabel(item.dateKey)} at {fmtTime(item.start)}.
+        {item.name}, {serviceName}. Now: {dayLabel(item.dateKey)} at {fmtTime(item.start)}.
       </p>
 
       <div className="field">

@@ -59,11 +59,23 @@ class Booking:
     email: str
     notes: str
     created_at: str
+    # The service's name as it was when the customer booked, so a service Vic later renames or removes
+    # still reads correctly on old bookings, emails and the dashboard.
+    service_name: str = ""
+    # The claims (5 minute units) the database really holds for this booking, read from its item. A booking made
+    # before units existed holds fewer, and releasing exactly what is held is what keeps cancelling safe.
+    held: tuple[int, ...] = ()
+    # Did the customer tick "text me"? Texts to a customer go out only when they did.
+    sms_consent: bool = False
+    # When the booking was made or last moved (ISO, UTC). A reminder whose time had already passed by then is skipped.
+    updated_at: str = ""
+    # Which reminders were already sent, like "24h". Keeps a reminder from going out twice.
+    reminders_sent: tuple[str, ...] = ()
 
     @property
     def claims(self) -> list[int]:
-        """The block starts this booking holds in the database."""
-        return shop.occupied_starts(self.start, self.minutes)
+        """The 5 minute units this booking holds in the database."""
+        return list(self.held) if self.held else shop.occupied_starts(self.start, self.minutes)
 
     def admin_view(self) -> dict:
         """What Vic's dashboard shows, contact details included."""
@@ -74,6 +86,7 @@ class Booking:
             "start": self.start,
             "minutes": self.minutes,
             "serviceId": self.service_id,
+            "serviceName": self.service_name,
             "name": self.name,
             "phone": self.phone,
             "email": self.email,
@@ -95,7 +108,7 @@ class Booking:
 
 @dataclass(frozen=True)
 class Block:
-    """Time Vic blocked off (lunch, a day off). `claims` are the 35 minute blocks it covers."""
+    """Time Vic blocked off (lunch, a day off). `claims` are the 5 minute units it covers."""
 
     id: str
     day: date

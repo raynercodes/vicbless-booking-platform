@@ -4,6 +4,8 @@
 //   cancelBooking(item)     ->  DELETE /admin/bookings/{id}              (frees the time)
 //   addBlock(block)         ->  POST   /admin/blocks                     (409 if it overlaps a booking or block)
 //   removeBlock(id)         ->  DELETE /admin/blocks/{id}
+//   getAdminSettings()      ->  GET    /admin/settings
+//   saveSettings(body)      ->  PUT    /admin/settings
 //   moveBooking(item, {dateKey, start})  ->  PATCH /admin/bookings/{id}   body { dateKey, start }
 //                                         (409 if the time is taken; the booking comes back with a NEW id)
 //
@@ -11,17 +13,22 @@
 // blocks the public mock marks as taken, so the schedule and the customer-facing time grid always
 // agree. Sample ones are marked so they are never mistaken for real customers.
 
-import { HOURS, SERVICES, SLOT_MINUTES } from '../config.js'
+import { HOURS } from '../config.js'
 import { getBusy } from '../lib/mockApi.js'
-import { blocksFor, fromKey, slotStarts } from '../lib/availability.js'
+import { fromKey, slotStarts } from '../lib/availability.js'
+import { fromApi, toApi } from '../lib/shopSettings.js'
 import {
   blockedStartsFor,
+  overlaps,
   readBlocks,
   readBookings,
   readCancelledSamples,
+  readShopSettings,
+  slotMinutesOn,
   writeBlocks,
   writeBookings,
   writeCancelledSamples,
+  writeShopSettings,
 } from '../lib/mockStore.js'
 import { findConflicts } from './blocks.js'
 
@@ -69,14 +76,16 @@ const NOTES = ['Wants it shorter on the sides', 'Bringing his son next', 'Regula
 
 function sampleItem(dateKey, start) {
   const h = hash(`${dateKey}|sample|${start}`)
-  const service = SERVICES[h % SERVICES.length]
+  const services = readShopSettings().services
+  const service = services[h % services.length]
   return {
     id: `sample-${dateKey}-${start}`,
     dateKey,
     source: 'sample',
     start,
-    minutes: service.minutes,
+    minutes: slotMinutesOn(dateKey),
     serviceId: service.id,
+    serviceName: service.name,
     name: `${FIRST[h % FIRST.length]} ${LAST[(h >>> 4) % LAST.length]}`,
     phone: `(555) 010-${String(100 + (h % 90)).padStart(4, '0').slice(-4)}`,
     // about two in three sample customers left an email, so the layout can be seen with and without
@@ -98,6 +107,7 @@ export async function getDay(dateKey) {
     start: b.start,
     minutes: b.minutes,
     serviceId: b.serviceId,
+    serviceName: b.serviceName || '',
     name: b.name,
     phone: b.phone,
     email: b.email || '',
@@ -106,9 +116,10 @@ export async function getDay(dateKey) {
   }))
 
   // real bookings and blocked time are never shown as sample bookings
+  const slot = slotMinutesOn(dateKey)
   const covered = new Set(blockedStartsFor(dateKey))
-  for (const b of real) {
-    for (let k = 0; k < blocksFor(b.minutes, SLOT_MINUTES); k++) covered.add(b.start + k * SLOT_MINUTES)
+  for (const start of busy) {
+    if (real.some((b) => overlaps(start, start + slot, b.start, b.start + b.minutes))) covered.add(start)
   }
   for (const start of [...busy].sort((a, b) => a - b)) {
     if (!covered.has(start)) items.push(sampleItem(dateKey, start))
@@ -140,8 +151,9 @@ export async function cancelBooking(item) {
 export async function addBlock({ dateKey, start, end, note = '', whole = false }) {
   await delay(250)
   const day = await getDay(dateKey)
-  const grid = slotStarts(fromKey(dateKey), HOURS, SLOT_MINUTES)
-  const conflicts = findConflicts({ range: { start, end }, grid, items: day.items, blocks: day.blocks, slotMinutes: SLOT_MINUTES })
+  const slot = slotMinutesOn(dateKey)
+  const grid = slotStarts(fromKey(dateKey), HOURS, slot)
+  const conflicts = findConflicts({ range: { start, end }, grid, items: day.items, blocks: day.blocks, slotMinutes: slot })
   if (conflicts.bookings.length > 0 || conflicts.blocks.length > 0) {
     const error = new Error('That time overlaps a booking or blocked time.')
     error.code = 'CONFLICT'
@@ -169,10 +181,9 @@ export async function removeBlock(id) {
 // A real booking keeps its code. A sample booking becomes a real one at the new time, and its old time is freed.
 export async function moveBooking(item, { dateKey, start }) {
   await delay(300)
-  const onGrid = slotStarts(fromKey(dateKey), HOURS, SLOT_MINUTES)
-  const blocks = blocksFor(item.minutes, SLOT_MINUTES)
-  const wanted = Array.from({ length: blocks }, (_, k) => start + k * SLOT_MINUTES)
-  if (!wanted.every((s) => onGrid.includes(s))) {
+  // The booking takes the new day's appointment length, like the real backend.
+  const slot = slotMinutesOn(dateKey)
+  if (!slotStarts(fromKey(dateKey), HOURS, slot).includes(start)) {
     const error = new Error('That is not a time Vic works.')
     error.code = 'INVALID'
     throw error
@@ -180,9 +191,10 @@ export async function moveBooking(item, { dateKey, start }) {
 
   const busy = new Set((await getBusy([dateKey]))[dateKey] || [])
   if (item.dateKey === dateKey) {
-    for (let k = 0; k < blocks; k++) busy.delete(item.start + k * SLOT_MINUTES) // its own old blocks are not in the way
+    // the appointment starts that only overlap this booking itself are not in its way
+    for (const s of [...busy]) if (overlaps(s, s + slot, item.start, item.start + item.minutes)) busy.delete(s)
   }
-  if (wanted.some((s) => busy.has(s))) {
+  if (busy.has(start)) {
     const error = new Error('That time is taken.')
     error.code = 'CONFLICT'
     throw error
@@ -190,7 +202,7 @@ export async function moveBooking(item, { dateKey, start }) {
 
   if (item.source === 'online') {
     writeBookings(
-      readBookings().map((b) => (b.code === item.id && b.dateKey === item.dateKey && b.start === item.start ? { ...b, dateKey, start } : b)),
+      readBookings().map((b) => (b.code === item.id && b.dateKey === item.dateKey && b.start === item.start ? { ...b, dateKey, start, minutes: slot } : b)),
     )
     return
   }
@@ -208,7 +220,8 @@ export async function moveBooking(item, { dateKey, start }) {
       serviceId: item.serviceId,
       dateKey,
       start,
-      minutes: item.minutes,
+      minutes: slot,
+      serviceName: item.serviceName || '',
       name: item.name,
       phone: item.phone,
       email: item.email,
@@ -216,4 +229,24 @@ export async function moveBooking(item, { dateKey, start }) {
       code,
     },
   ])
+}
+
+// The settings screen: read what is saved, and save a new version. Takes and gives the API's shape.
+export async function getAdminSettings() {
+  await delay(150)
+  return toApi(readShopSettings())
+}
+
+export async function saveSettings(body) {
+  await delay(300)
+  const parsed = fromApi({
+    // A new service has no id yet; the real backend makes one, so the mock does too.
+    services: body.services.map((s) => ({ ...s, id: s.id || `svc-${Math.random().toString(16).slice(2, 8)}` })),
+    slotMinutes: body.slotMinutes,
+    reminderHours: body.reminderHours,
+  })
+  if (!parsed) throw new Error('Those settings are not valid.')
+  const saved = toApi(parsed)
+  writeShopSettings(saved)
+  return saved
 }

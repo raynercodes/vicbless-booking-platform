@@ -41,6 +41,10 @@ describe('structured data (JSON-LD)', () => {
     expect([...jsonLd().sameAs].sort()).toEqual(Object.values(SOCIAL).sort())
   })
 
+  it('lists the contact email from config.js', () => {
+    expect(jsonLd().email).toBe(BUSINESS.email)
+  })
+
   it('does not publish the placeholder phone number', () => {
     // BUSINESS.phone is still a placeholder. Add "telephone" to the JSON-LD only once it is Vic's real number.
     if (/PLACEHOLDER|\(555\)/.test(BUSINESS.phone)) expect(jsonLd()).not.toHaveProperty('telephone')

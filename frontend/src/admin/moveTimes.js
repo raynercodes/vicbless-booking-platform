@@ -9,11 +9,12 @@ export function moveDateRange(today = new Date()) {
   return { min: keyOf(today), max: keyOf(last) }
 }
 
-// The block starts a booking holds, e.g. a 70 minute booking at 12:00 holds 12:00 and 12:35.
-export function ownStarts(item, slotMinutes) {
-  const out = []
-  for (let k = 0; k < blocksFor(item.minutes, slotMinutes); k++) out.push(item.start + k * slotMinutes)
-  return out
+// The appointment starts on the day's grid that overlap this booking. They are "its own" times: moving a booking
+// by a little must not be blocked by itself. `grid` is the day's appointment starts (see slotStarts).
+// e.g. a 35 minute booking at 12:35, on a day that is now 45 minutes (12:00, 12:45): it overlaps both.
+export function ownStarts(item, slotMinutes, grid) {
+  const end = item.start + item.minutes
+  return grid.filter((s) => s < end && s + slotMinutes > item.start)
 }
 
 // Every start time on the chosen day, each marked so the screen can show it properly:

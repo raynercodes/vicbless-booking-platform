@@ -107,6 +107,12 @@ describe('findConflicts', () => {
     expect(findConflicts({ range, grid: g, items: [], blocks: [] })).toEqual(none)
   })
 
+  it('counts a booking from another appointment length that only overlaps the edge', () => {
+    const range = { start: at(12), end: at(12, 45) } // one 45 minute block
+    expect(findConflicts({ range, grid: g, items: [booking(at(12, 35), 35)], blocks: [] }).bookings).toHaveLength(1)
+    expect(findConflicts({ range, grid: g, items: [booking(at(12, 45), 35)], blocks: [] }).bookings).toHaveLength(0)
+  })
+
   it('works across Saturday\'s break', () => {
     const sat = grid(SATURDAY)
     const range = { start: at(11, 20), end: at(13, 10) } // last morning block into the afternoon

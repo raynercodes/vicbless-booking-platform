@@ -2,7 +2,7 @@
 
 Every request body is checked and cleaned here, BEFORE any business logic runs:
   - anything not listed in a model is ignored (for example the `minutes` the site sends: the API
-    looks the real length up from the service, so a customer can never choose how long a cut takes)
+    works out the real length from the day's setting, so a customer can never choose how long a cut takes)
   - text is stripped of hidden control characters and extra spaces
   - the error messages are written for customers and for Vic, not for programmers. The site shows
     them as they are, so they must read like a person wrote them.
@@ -16,7 +16,7 @@ import re
 import unicodedata
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
 
 from ..core.errors import ValidationFailed
 from ..domain import shop
@@ -29,6 +29,11 @@ NOTE_MAX = 80  # Vic's own label on a blocked-off time, like "Lunch"
 EMAIL_MAX = 254  # the longest an email address can legally be
 PHONE_MIN_DIGITS = 10
 PHONE_MAX_DIGITS = 15  # the international maximum
+SERVICE_NAME_MIN = 2
+SERVICE_NAME_MAX = 60
+SERVICE_NOTE_MAX = 120
+SERVICE_PRICE_MAX = 999  # dollars
+SERVICE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 
 # Deliberately simple: "something@something.something" with no spaces. Real validation of an email
 # address means actually sending to it, so we only catch obvious typos here.
@@ -44,6 +49,18 @@ MSG_TIME = "Please pick a time from the list."
 MSG_SERVICE = "Please pick a service from the list."
 MSG_STAFF = "Please pick a barber from the list."
 MSG_PASSWORD = "Please enter your password."
+MSG_SERVICE_NAME = f"Each service needs a name, between {SERVICE_NAME_MIN} and {SERVICE_NAME_MAX} characters."
+MSG_SERVICE_PRICE = f"A price has to be a whole number of dollars, from 0 to {SERVICE_PRICE_MAX}."
+MSG_SERVICE_NOTE = f"A service note can be up to {SERVICE_NOTE_MAX} characters. Please shorten it a little."
+MSG_SERVICE_ID = "Something is wrong with that service. Reload the dashboard and try again."
+MSG_SERVICES_COUNT = f"List between 1 and {shop.MAX_SERVICES} services."
+MSG_SERVICES_DUPLICATE = "Two services have the same name. Give each one its own name."
+MSG_SLOTS = (
+    f"Each appointment length has to be between {shop.MIN_SLOT_MINUTES} and {shop.MAX_SLOT_MINUTES} minutes, "
+    f"in steps of {shop.UNIT_MINUTES}."
+)
+MSG_REMINDERS = "Pick reminder times from the list."
+MSG_SLOT_DAYS = "Set an appointment length for every day of the week."
 
 
 def clean_text(value: str, *, keep_newlines: bool = False) -> str:
@@ -117,6 +134,7 @@ class BookingIn(BaseModel):
     phone: str
     email: str | None = None
     notes: str | None = None
+    smsConsent: StrictBool = False  # ticked "text me" (texts to a customer go out only when this is true)
 
     @field_validator("staffId")
     @classmethod
@@ -128,7 +146,9 @@ class BookingIn(BaseModel):
     @field_validator("serviceId")
     @classmethod
     def _service(cls, v: str) -> str:
-        if v not in shop.SERVICES:
+        # Only the shape is checked here. Whether it is one of Vic's CURRENT services is decided in services/bookings.py,
+        # because Vic can change the list at any time.
+        if not SERVICE_ID_PATTERN.match(v):
             raise ValueError(MSG_SERVICE)
         return v
 
@@ -237,3 +257,90 @@ class BlockIn(BaseModel):
     @classmethod
     def _note(cls, v: str | None) -> str:
         return one_line(v or "")[:NOTE_MAX]  # a long label is trimmed rather than refused
+
+
+class ServiceIn(BaseModel):
+    """One service in Vic's settings. A service that already exists keeps its `id`; a new one has none yet."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    id: str | None = None
+    name: str
+    price: StrictInt
+    # "from" is a Python keyword, so the field is called from_price and given its JSON name with alias.
+    from_price: StrictBool = Field(default=False, alias="from")
+    note: str | None = None
+
+    @field_validator("id")
+    @classmethod
+    def _id(cls, v: str | None) -> str | None:
+        if v in (None, ""):
+            return None
+        if not SERVICE_ID_PATTERN.match(v):
+            raise ValueError(MSG_SERVICE_ID)
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = one_line(v)
+        if not SERVICE_NAME_MIN <= len(v) <= SERVICE_NAME_MAX:
+            raise ValueError(MSG_SERVICE_NAME)
+        return v
+
+    @field_validator("price")
+    @classmethod
+    def _price(cls, v: int) -> int:
+        if not 0 <= v <= SERVICE_PRICE_MAX:
+            raise ValueError(MSG_SERVICE_PRICE)
+        return v
+
+    @field_validator("note")
+    @classmethod
+    def _note(cls, v: str | None) -> str:
+        v = one_line(v or "")
+        if len(v) > SERVICE_NOTE_MAX:
+            raise ValueError(MSG_SERVICE_NOTE)
+        return v
+
+
+class SettingsIn(BaseModel):
+    """Vic saving his settings (PUT /api/admin/settings): the whole list of services, and an appointment length per day."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    services: list[ServiceIn]
+    slotMinutes: dict[str, StrictInt]  # {"mon": 45, "tue": 45, ...} every weekday, in minutes
+    reminderHours: list[StrictInt] | None = None  # hours before an appointment; [] = none; left out = keep what is saved
+
+    @field_validator("services")
+    @classmethod
+    def _services(cls, v: list[ServiceIn]) -> list[ServiceIn]:
+        if not 1 <= len(v) <= shop.MAX_SERVICES:
+            raise ValueError(MSG_SERVICES_COUNT)
+        ids = [s.id for s in v if s.id]
+        if len(ids) != len(set(ids)):
+            raise ValueError(MSG_SERVICE_ID)
+        names = [s.name.casefold() for s in v]
+        if len(names) != len(set(names)):
+            raise ValueError(MSG_SERVICES_DUPLICATE)
+        return v
+
+    @field_validator("reminderHours")
+    @classmethod
+    def _reminders(cls, v: list[int] | None) -> list[int] | None:
+        if v is None:
+            return None
+        if len(set(v)) != len(v) or any(h not in shop.REMINDER_CHOICES for h in v):
+            raise ValueError(MSG_REMINDERS)
+        return v
+
+    @field_validator("slotMinutes")
+    @classmethod
+    def _slots(cls, v: dict[str, int]) -> dict[str, int]:
+        if set(v) != set(shop.WEEKDAY_KEYS):
+            raise ValueError(MSG_SLOT_DAYS)
+        for minutes in v.values():
+            if not shop.MIN_SLOT_MINUTES <= minutes <= shop.MAX_SLOT_MINUTES or minutes % shop.UNIT_MINUTES:
+                raise ValueError(MSG_SLOTS)
+        return v

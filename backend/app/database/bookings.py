@@ -27,6 +27,11 @@ def booking_from(item: dict) -> Booking:
         email=item.get("email", ""),
         notes=item.get("notes", ""),
         created_at=item.get("createdAt", ""),
+        service_name=item.get("serviceName", ""),
+        held=tuple(int(u) for u in item.get("blocks", [])),
+        sms_consent=bool(item.get("smsConsent", False)),
+        updated_at=item.get("updatedAt", item.get("createdAt", "")),
+        reminders_sent=tuple(str(t) for t in item.get("remindersSent", [])),
     )
 
 
@@ -66,8 +71,8 @@ def upcoming_for_phone(phone: str, from_day: date) -> int:
 
 
 def _booking_item(
-    *, booking_id: str, day: date, start: int, service_id: str, minutes: int, name: str, phone: str,
-    email: str, notes: str, code: str, created: str,
+    *, booking_id: str, day: date, start: int, service_id: str, service_name: str, minutes: int, name: str,
+    phone: str, email: str, notes: str, code: str, created: str, updated: str, sms_consent: bool,
 ) -> dict:  # fmt: skip
     """The raw DynamoDB item for a booking. One place builds it, so a new booking and a moved one can't differ."""
     return {
@@ -80,12 +85,16 @@ def _booking_item(
         "start": start,
         "minutes": minutes,
         "serviceId": service_id,
+        "serviceName": service_name,
         "name": name,
         "phone": phone,
         "email": email,
         "notes": notes,
         "createdAt": created,
-        "blocks": shop.occupied_starts(start, minutes),
+        "updatedAt": updated,  # made or last moved: reminders already past at this moment are skipped
+        "smsConsent": sms_consent,
+        "blocks": shop.occupied_starts(start, minutes),  # the claims it holds. Releasing exactly these is what keeps cancelling safe
+        "units": True,  # claims are 5 minute units (items made before that are brought up to date by scripts/migrate_unit_claims.py)
         "gsi1pk": f"PHONE#{phone}",  # sparse index: lets us count a phone number's upcoming bookings
         "gsi1sk": f"{day.isoformat()}#{shop.hhmm(start)}",
         "expiresAt": keys.expires(day),
@@ -93,14 +102,16 @@ def _booking_item(
 
 
 def create_booking(
-    *, day: date, start: int, service_id: str, minutes: int, name: str, phone: str, email: str, notes: str, code: str
-) -> Booking:
+    *, day: date, start: int, service_id: str, service_name: str, minutes: int, name: str, phone: str, email: str,
+    notes: str, code: str, sms_consent: bool = False,
+) -> Booking:  # fmt: skip
     booking_id = new_id(day, start)
-    claims = shop.occupied_starts(start, minutes)  # the 35 minute blocks this booking will hold
+    claims = shop.occupied_starts(start, minutes)  # the 5 minute units this booking will hold
     created = datetime.now(timezone.utc).isoformat(timespec="seconds")
     item = _booking_item(
-        booking_id=booking_id, day=day, start=start, service_id=service_id, minutes=minutes, name=name,
-        phone=phone, email=email, notes=notes, code=code, created=created,
+        booking_id=booking_id, day=day, start=start, service_id=service_id, service_name=service_name,
+        minutes=minutes, name=name, phone=phone, email=email, notes=notes, code=code, created=created,
+        updated=created, sms_consent=sms_consent,
     )  # fmt: skip
     # ONE transaction: the booking itself plus one claim per block. If any claim already exists the
     # whole thing is refused and nothing is written, so a booking can never be half-made.
@@ -141,24 +152,27 @@ def cancel_booking(booking_id: str) -> Booking:
     return booking
 
 
-def move_booking(booking: Booking, *, day: date, start: int) -> Booking:
+def move_booking(booking: Booking, *, day: date, start: int, minutes: int) -> Booking:
     """Moves a booking to a new day/time in ONE transaction, so it is never in two places or in none.
 
     The booking id contains its day and time, so a moved booking gets a NEW id (the customer's code stays
     the same). The transaction:
       - deletes the old booking item and creates the new one
-      - releases the old blocks nobody needs any more, and claims the new ones (refused if any is taken)
-      - for a block that is in BOTH (moving a long booking a little), hands it over in place
+      - releases the old units nobody needs any more, and claims the new ones (refused if any is taken)
+      - for a unit that is in BOTH (moving a booking a little), hands it over in place
+
+    `minutes` is the appointment length on the NEW day (the booking takes that day's slot).
     If anything fails, nothing changes: the booking stays exactly where it was.
     """
     new_booking_id = new_id(day, start)
     old_blocks = {(booking.day, s) for s in booking.claims}
-    new_blocks = {(day, s) for s in shop.occupied_starts(start, booking.minutes)}
+    new_blocks = {(day, s) for s in shop.occupied_starts(start, minutes)}
 
     item = _booking_item(
-        booking_id=new_booking_id, day=day, start=start, service_id=booking.service_id, minutes=booking.minutes,
-        name=booking.name, phone=booking.phone, email=booking.email, notes=booking.notes, code=booking.code,
-        created=booking.created_at,
+        booking_id=new_booking_id, day=day, start=start, service_id=booking.service_id,
+        service_name=booking.service_name, minutes=minutes, name=booking.name, phone=booking.phone,
+        email=booking.email, notes=booking.notes, code=booking.code, created=booking.created_at,
+        updated=datetime.now(timezone.utc).isoformat(timespec="seconds"), sms_consent=booking.sms_consent,
     )  # fmt: skip
     transaction = [
         {

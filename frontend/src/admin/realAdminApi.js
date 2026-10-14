@@ -6,6 +6,8 @@
 //   moveBooking(item, to)     PATCH  /api/admin/bookings/{id}    (the booking comes back with a NEW id)
 //   addBlock(block)           POST   /api/admin/blocks
 //   removeBlock(id)           DELETE /api/admin/blocks/{id}
+//   getAdminSettings()        GET    /api/admin/settings
+//   saveSettings(body)        PUT    /api/admin/settings       (the saved settings come back)
 //
 // Errors thrown to the screens: an ApiError whose `.code` is 'CONFLICT' when the time is taken or
 // overlaps something, 'INVALID' when it is not a time Vic works, and the API's own word otherwise.
@@ -102,4 +104,12 @@ export function addBlock({ dateKey, start, end, note = '', whole = false }) {
 
 export async function removeBlock(id) {
   await call('DELETE', `/admin/blocks/${encodeURIComponent(id)}`)
+}
+
+export function getAdminSettings() {
+  return call('GET', '/admin/settings')
+}
+
+export function saveSettings(body) {
+  return call('PUT', '/admin/settings', body)
 }

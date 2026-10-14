@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from ..domain import shop
 from ..domain.models import Block, Booking
 from . import blocks as blocks_db
 from . import bookings as bookings_db
@@ -34,17 +35,20 @@ def query_range(low: str, high: str, projection: bool = False) -> list[dict]:
         kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
 
 
-def availability(first: date, last: date) -> dict[str, dict]:
-    """{ 'YYYY-MM-DD': { busy: [block starts], dayOff: bool } } for every day in the range.
+def availability(first: date, last: date, settings: shop.ShopSettings) -> dict[str, dict]:
+    """{ 'YYYY-MM-DD': { busy: [appointment starts], dayOff: bool, slotMinutes: int } } for every day in the range.
 
-    `busy` lists the taken blocks (bookings and block-offs alike, so the site greys them out the same way).
-    `dayOff` is true when Vic took the whole day off, so the site can say "Closed" instead of "Full".
+    `busy` lists the appointment starts of that day's grid that overlap anything taken (bookings and block-offs alike,
+    so the site greys them out the same way). `dayOff` is true when Vic took the whole day off, so the site can say
+    "Closed" instead of "Full". `slotMinutes` is how long an appointment is that day.
     """
     # Start every day empty, so days with nothing booked still appear in the answer.
     days: dict[str, dict] = {}
+    taken: dict[str, set[int]] = {}
     d = first
     while d <= last:
-        days[d.isoformat()] = {"busy": [], "dayOff": False}
+        days[d.isoformat()] = {"busy": [], "dayOff": False, "slotMinutes": settings.slot_for(d)}
+        taken[d.isoformat()] = set()
         d += timedelta(days=1)
     items = query_range(f"{first.isoformat()}#", f"{last.isoformat()}#~", projection=True)
     for item in items:
@@ -53,11 +57,12 @@ def availability(first: date, last: date) -> dict[str, dict]:
         if entry is None:
             continue
         if kind == "CLAIM":
-            entry["busy"].append(keys.minutes_of(rest[0]))
+            taken[day_key].add(keys.minutes_of(rest[0]))
         elif kind == "BLOCK" and item.get("whole"):
             entry["dayOff"] = True
-    for entry in days.values():
-        entry["busy"].sort()
+    for day_key, entry in days.items():
+        day = date.fromisoformat(day_key)
+        entry["busy"] = shop.busy_slots(day, entry["slotMinutes"], taken[day_key])
     return days
 
 

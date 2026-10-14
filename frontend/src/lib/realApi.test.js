@@ -69,6 +69,16 @@ describe('createBooking', () => {
     expect(booking).toMatchObject({ code: 'ABC23', name: 'Marcus Jones', serviceId: 'haircut', start: 660 })
   })
 
+  it('sends the text consent only when the box was ticked', async () => {
+    stub(json(201, { code: 'ABC23', dateKey: '2026-10-13', start: 660, minutes: 35, serviceId: 'haircut', staffId: 'vic' }))
+    await createBooking(payload)
+    expect(JSON.parse(calls[0].init.body).smsConsent).toBe(false) // nothing said means no
+    await createBooking({ ...payload, smsConsent: 'yes' })
+    expect(JSON.parse(calls[1].init.body).smsConsent).toBe(false) // only a real true counts
+    await createBooking({ ...payload, smsConsent: true })
+    expect(JSON.parse(calls[2].init.body).smsConsent).toBe(true)
+  })
+
   it('treats a repeat of the same booking (200) as success', async () => {
     stub(json(200, { code: 'ABC23', dateKey: '2026-10-13', start: 660, minutes: 35, serviceId: 'haircut', staffId: 'vic' }))
     expect((await createBooking(payload)).code).toBe('ABC23')

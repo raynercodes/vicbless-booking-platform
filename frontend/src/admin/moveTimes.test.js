@@ -44,10 +44,18 @@ describe('moveOptions', () => {
 })
 
 describe('ownStarts', () => {
-  it('lists every block a booking holds', () => {
-    expect(ownStarts({ start: 720, minutes: 35 }, 35)).toEqual([720])
-    expect(ownStarts({ start: 720, minutes: 70 }, 35)).toEqual([720, 755])
-    expect(ownStarts({ start: 720, minutes: 30 }, 35)).toEqual([720])
+  const grid35 = [720, 755, 790, 825]
+  const grid45 = [720, 765, 810, 855]
+
+  it('lists the grid times a booking overlaps', () => {
+    expect(ownStarts({ start: 720, minutes: 35 }, 35, grid35)).toEqual([720])
+    expect(ownStarts({ start: 720, minutes: 70 }, 35, grid35)).toEqual([720, 755])
+    expect(ownStarts({ start: 755, minutes: 35 }, 35, grid35)).toEqual([755])
+  })
+
+  it('also finds the times of a different appointment length', () => {
+    // a 35 minute booking at 12:35 to 1:10 touches both 12:00-12:45 and 12:45-1:30
+    expect(ownStarts({ start: 755, minutes: 35 }, 45, grid45)).toEqual([720, 765])
   })
 })
 

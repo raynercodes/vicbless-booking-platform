@@ -26,6 +26,7 @@ class Settings:
     table_name: str
     cors_origins: tuple[str, ...]
     email_provider: str
+    sms_provider: str
 
     @property
     def ssm_prefix(self) -> str:
@@ -40,6 +41,7 @@ def get_settings() -> Settings:
         table_name=os.environ.get("TABLE_NAME", "vicbless-dev"),
         cors_origins=origins,
         email_provider=os.environ.get("EMAIL_PROVIDER", "resend").strip().lower(),
+        sms_provider=os.environ.get("SMS_PROVIDER", "textbelt").strip().lower(),
     )
 
 
@@ -79,7 +81,17 @@ class ParamStore:
 params = ParamStore()
 
 
+_reset_hooks: list = []
+
+
+def on_reset(hook) -> None:
+    """Lets another module (for example the settings cache) be cleared together with the rest by reset_caches()."""
+    _reset_hooks.append(hook)
+
+
 def reset_caches() -> None:
-    """Forget cached clients and parameters. Tests call this between cases."""
+    """Forget cached clients, parameters and anything registered with on_reset. Tests call this between cases."""
     aws.reset_clients()
     params.reset()
+    for hook in _reset_hooks:
+        hook()

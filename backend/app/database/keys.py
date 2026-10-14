@@ -1,8 +1,10 @@
 """How items are named in the table. All of Vic's items share one partition; the sort key sorts by day.
 
-    2026-10-12#CLAIM#1200                 one per taken 35 minute block
+    2026-10-12#CLAIM#1200                 one per taken 5 minute unit (a 45 minute booking holds nine)
     2026-10-12#BOOKING#1200#<booking id>  the booking itself
     2026-10-12#BLOCK#1200#<block id>      time Vic blocked off
+    SETTINGS                              Vic's settings (services, prices, appointment lengths). It has no date in front,
+                                          so it never shows up in a day's range and never expires.
 Failed-login counters live under their own partition key (LOCK#...).
 """
 
@@ -24,6 +26,9 @@ def expires(day: date) -> int:
     """
     end = datetime(day.year, day.month, day.day, tzinfo=timezone.utc) + timedelta(days=KEEP_DAYS_AFTER)
     return int(end.timestamp())
+
+
+SETTINGS_SK = "SETTINGS"
 
 
 def claim_sk(day: date, start: int) -> str:

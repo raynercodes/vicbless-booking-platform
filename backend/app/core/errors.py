@@ -7,16 +7,22 @@ Each error carries three things the site needs:
 Raise one of these from anywhere in the app; core/web.py turns it into the response.
 """
 
+from .brand import CONTACT_EMAIL
+
 
 class ApiError(Exception):
     status = 400
     code = "bad_request"
 
-    def __init__(self, message: str | None = None, *, code: str | None = None):
+    field: str | None = None  # which form field the problem is about, when it is about one
+
+    def __init__(self, message: str | None = None, *, code: str | None = None, field: str | None = None):
         super().__init__(message or self.default_message)
         self.message = message or self.default_message
         if code:
             self.code = code
+        if field:
+            self.field = field
 
     default_message = "Something went wrong with that request. Please try again."
 
@@ -70,7 +76,7 @@ class Unauthorized(ApiError):
 class TooManyBookings(ApiError):
     status = 429
     code = "too_many_bookings"
-    default_message = "This phone number already has the most upcoming bookings we allow. Please call or text Vic to change one."
+    default_message = f"This phone number already has the most upcoming bookings we allow. Please email Vic at {CONTACT_EMAIL} to change one."
 
 
 class TooManyAttempts(ApiError):

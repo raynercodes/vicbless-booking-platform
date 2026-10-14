@@ -13,6 +13,7 @@ from ..core import config
 from ..domain import shop
 from ..schemas.requests import BookingIn, date_from_query
 from ..services import bookings, notifications
+from ..services import settings as settings_service
 
 router = APIRouter()
 
@@ -35,6 +36,12 @@ def availability(from_: str = Query(alias="from"), to: str = Query()) -> dict:
     `from` is a Python keyword, so the parameter is called from_ here and given its URL name with alias.
     """
     return bookings.get_availability(date_from_query(from_), date_from_query(to))
+
+
+@router.get("/settings")
+def shop_settings() -> dict:
+    """The services and prices, and how long an appointment is on each weekday. The site reads this to draw its pages."""
+    return settings_service.to_view(settings_service.current())
 
 
 @router.post("/bookings")

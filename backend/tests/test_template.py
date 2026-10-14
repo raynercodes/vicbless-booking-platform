@@ -29,8 +29,15 @@ def test_no_codedeploy_anywhere(t):
 
 def test_no_docs_route_and_only_api_paths(t):
     events = t["Resources"]["ApiFunction"]["Properties"]["Events"]
-    paths = {e["Properties"]["Path"] for e in events.values()}
+    paths = {e["Properties"]["Path"] for e in events.values() if e["Type"] == "HttpApi"}
     assert paths == {"/api", "/api/{proxy+}", "/api/admin/login"}
+
+
+def test_reminders_run_on_a_schedule_and_text_provider_is_set(t):
+    fn = t["Resources"]["ApiFunction"]["Properties"]
+    schedules = [e for e in fn["Events"].values() if e["Type"] == "Schedule"]
+    assert len(schedules) == 1 and schedules[0]["Properties"]["Schedule"] == "rate(15 minutes)"
+    assert fn["Environment"]["Variables"]["SMS_PROVIDER"] == "textbelt"
 
 
 def test_table(t):

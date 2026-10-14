@@ -10,13 +10,14 @@ backend/
     main.py        builds the app (routers, error handling, middleware) and nothing else
     handler.py     the AWS Lambda entry point
     routes/        the URLs. public.py (health, availability, bookings), admin.py (Vic's routes), deps.py (shared helpers)
-    services/      what happens: bookings.py, blocks.py, auth.py, schedule.py, notifications.py (emails)
+    services/      what happens: bookings.py, blocks.py, auth.py, schedule.py, notifications.py (emails and texts), reminders.py
     database/      everything that touches DynamoDB: bookings.py, blocks.py, schedule.py (reads),
                    login_attempts.py, keys.py (how items are named), transactions.py (the no-double-booking write), table.py
-    domain/        the shop itself: shop.py (hours, services, the 35 minute grid, booking rules) and models.py (Booking, Block, ids)
+    domain/        the shop itself: shop.py (hours, default services and appointment lengths, booking rules) and models.py (Booking, Block, ids)
     schemas/       requests.py: what the site is allowed to send, cleaned and checked
     core/          config.py (settings + AWS secrets), security.py (password + session), aws.py, logs.py, errors.py, web.py (headers, CORS, error JSON)
-    emailing/      email providers: resend.py (today), templates.py (the three emails)
+    emailing/      email providers: resend.py (today), templates.py (the emails)
+    texting/       text message providers: textbelt.py (today), templates.py (the texts)
   tests/
     fixtures/      what pytest sets up for you: aws.py (fake AWS + the table, built from infra/template.yaml),
                    clock.py (frozen "now"), api.py (client, signed-in Vic), email.py (catches outgoing emails)
@@ -29,12 +30,15 @@ Each layer only talks to the ones below it: **routes -> services -> database -> 
 (`test_structure.py` fails if that is broken, or if anything but the web layer imports FastAPI).
 
 **Where do I change...?**
-- the shop's hours, services or 35-minute rule: `domain/shop.py` (and `frontend/src/config.js`, a test checks they match)
+- the shop's opening hours: `domain/shop.py` (and `frontend/src/config.js`, a test checks they match)
+- the services, prices and appointment lengths: Vic edits these himself in the dashboard (Settings). The values a fresh
+  database starts with are `DEFAULT_SETTINGS` in `domain/shop.py` (Monday and Tuesday 45 minutes, the rest 35)
 - what a customer may type in the form: `schemas/requests.py`
 - what happens when someone books, cancels or is moved: `services/bookings.py`
 - a URL or its response: `routes/`
 - how it is stored: `database/`
-- the wording of an email: `emailing/templates.py`
+- the wording of an email: `emailing/templates.py`; of a text: `texting/templates.py`
+- when reminders go out: Vic picks the times in Shop settings; the 15 minute sweep is `services/reminders.py`
 
 ## Environments
 `dev` is the staging environment for this project. `prod` is the real one. Nothing else.
@@ -55,14 +59,33 @@ Each layer only talks to the ones below it: **routes -> services -> database -> 
 Admin calls send `Authorization: Bearer <token>`. Errors are always `{ "error": { "code", "message" } }`.
 
 ## How double booking is prevented
-Each 35 minute block of each day is one DynamoDB item that can only be created once. A booking writes
-its blocks and itself in a single transaction that fails as a whole if any block already exists.
+Time is counted in 5 minute units. Each unit of each day is one DynamoDB item that can only be created once. A
+booking (or a block-off) writes every unit it covers, and itself, in a single transaction that fails as a whole if
+any unit already exists. Because the units are small, the appointment length can differ by weekday and change later;
+an older booking still blocks exactly the time it covers. A very long block-off is written in pieces and undone if a
+later piece is refused.
 The availability list is only for display; the transaction is the real guard.
+
+## One-time upgrade after the settings release
+Bookings made before it hold fewer units. Deploy the backend, then for each environment:
+`AWS_PROFILE=vicbless python backend/scripts/migrate_unit_claims.py --env dev` (shows what it would do), then again
+with `--apply`. It only adds free claims, is safe to repeat, and reports (never overwrites) a conflict.
 
 ## Settings in AWS (SSM Parameter Store, `/vicbless/<env>/...`)
 `pepper`, `jwt-secret`, `admin-password-hash`, `resend-api-key` (SecureString) and `owner-email`,
 `email-from` (String). `app-version` is written by the deploy workflow.
 Make the first three with `python backend/scripts/hash_password.py --env dev`.
+
+## Texts and reminders
+Textbelt for now (`app/texting/textbelt.py`). Setup per environment (run with `AWS_PROFILE=vicbless`):
+`textbelt-key` (SecureString: the key bought at textbelt.com; the key `textbelt` is a free test key, about one text a
+day) and `owner-phone` (String: Vic's mobile, he is texted about every new booking). Without a key texts are skipped and
+logged, nothing breaks. A customer is texted only if they ticked "text me" on the booking form. Textbelt answers STOP replies
+itself. When the AWS SMS account is approved: add `texting/aws.py`, add it to `get_sender()`, set `SMS_PROVIDER=aws`,
+delete `textbelt.py`.
+Reminders: the same Lambda runs `services/reminders.py` every 15 minutes (EventBridge schedule in `infra/template.yaml`).
+Vic chooses the times (24 and 2 hours before to start with) in Shop settings. Each one is marked on the booking as sent first,
+so it goes out once.
 
 ## Email
 Resend for now (`app/emailing/resend.py`). Until a domain is verified in Resend it can only send from
@@ -81,4 +104,3 @@ The tests use a fake AWS (moto), and the fake table is created from the real def
 `infra/template.yaml`, so the tests can't pass against a table shape that isn't the deployed one.
 `test_contract.py` reads `frontend/src/config.js` and fails if the hours, services, slot length or
 input limits (name 50, notes 500) there differ from `app/domain/shop.py` and `app/schemas/requests.py`.
-

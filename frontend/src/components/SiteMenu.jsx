@@ -50,7 +50,8 @@ function Switch({ id, label, hint, checked, onToggle }) {
 }
 
 // `children` are extra rows shown at the bottom of the menu (the dashboard adds View site and Sign out).
-export default function SiteMenu({ children }) {
+// `settingsExtra({ close })` adds rows to the Settings dropdown; only the dashboard passes it, so customers never see them.
+export default function SiteMenu({ children, settingsExtra }) {
   const [open, setOpen] = useState(false)
   const [section, setSection] = useState(null) // 'socials' | 'settings' | null, one open at a time
   const wrapRef = useRef(null)
@@ -150,6 +151,7 @@ export default function SiteMenu({ children }) {
               checked={theme === 'dark'}
               onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             />
+            {settingsExtra && settingsExtra({ close: () => setOpen(false) })}
           </div>
         </div>
 

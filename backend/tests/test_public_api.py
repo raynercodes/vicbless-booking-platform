@@ -40,7 +40,7 @@ def test_book_then_availability_shows_it(client):
 def test_availability_covers_every_day_in_range(client):
     days = client.get("/api/availability?from=2026-10-12&to=2026-10-14").json()
     assert sorted(days) == ["2026-10-12", "2026-10-13", "2026-10-14"]
-    assert days["2026-10-14"] == {"busy": [], "dayOff": False}
+    assert days["2026-10-14"] == {"busy": [], "dayOff": False, "slotMinutes": 35}
 
 
 def test_second_booking_same_time_is_409_slot_taken(client):

@@ -85,7 +85,7 @@ def test_phone_cap_message_mentions_the_limit(client):
     for day, start in plan:
         book(client, dateKey=day, start=start)
     r = book(client, dateKey="2026-10-20", start=12 * 60)
-    assert r.status_code == 429 and "3 upcoming bookings" in message_of(r) and "call or text Vic" in message_of(r)
+    assert r.status_code == 429 and "3 upcoming bookings" in message_of(r) and "email Vic at vicslegacy89@gmail.com" in message_of(r)
 
 
 def test_slot_taken_message(client):

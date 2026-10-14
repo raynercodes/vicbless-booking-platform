@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { HOURS, SERVICES, SLOT_MINUTES } from '../config.js'
+import { HOURS } from '../config.js'
 import { fmtTime, fromKey, keyOf } from '../lib/availability.js'
 import { formatPhone, mailtoHref, telHref } from '../lib/format.js'
+import { findService, slotFor } from '../lib/shopSettings.js'
+import { useShopSettings } from '../lib/useShopSettings.js'
 import BlockOff from './BlockOff.jsx'
 import ConfirmBox from './ConfirmBox.jsx'
 import JumpToDate from './JumpToDate.jsx'
@@ -26,8 +28,10 @@ const Chevron = ({ direction }) => (
 
 // `ctl` is the set of actions the schedule gives every card (see `ctl` in Schedule below).
 function BookingCard({ item, ctl }) {
-  const service = SERVICES.find((s) => s.id === item.serviceId)
-  const serviceName = service ? service.name : 'Appointment'
+  const shop = useShopSettings()
+  // The name the customer booked, even if Vic has renamed or removed the service since.
+  const service = findService(shop, item.serviceId)
+  const serviceName = item.serviceName || (service ? service.name : 'Appointment')
   const tel = telHref(item.phone)
   // Tapping the email opens his email app, addressed to the customer, with the subject already written.
   const mail = mailtoHref(
@@ -125,6 +129,7 @@ function BlockCard({ block, ctl }) {
 }
 
 export default function Schedule() {
+  const shop = useShopSettings()
   const [dateKey, setDateKey] = useState(() => keyOf(new Date()))
   const [state, setState] = useState({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
@@ -175,10 +180,10 @@ export default function Schedule() {
             hours: HOURS,
             items: state.day.items,
             blocks: state.day.blocks,
-            slotMinutes: SLOT_MINUTES,
+            slotMinutes: slotFor(shop, fromKey(dateKey)),
           })
         : null,
-    [state, dateKey],
+    [state, dateKey, shop],
   )
 
   function shift(days) {

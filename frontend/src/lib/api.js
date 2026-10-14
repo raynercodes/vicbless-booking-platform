@@ -14,4 +14,5 @@ const layer = API_MODE === 'real' ? real : mock
 export { SlotTakenError } from './errors.js'
 export const getAvailability = (dateKeys) => layer.getAvailability(dateKeys)
 export const getBusy = (dateKeys) => layer.getBusy(dateKeys)
+export const getShopSettings = () => layer.getShopSettings()
 export const createBooking = (payload) => layer.createBooking(payload)

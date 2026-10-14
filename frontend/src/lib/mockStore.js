@@ -2,13 +2,15 @@
 // It exists so that cancelling or blocking time in the dashboard changes what customers see.
 // It goes away when the real backend exists.
 
-import { HOURS, SLOT_MINUTES } from '../config.js'
+import { HOURS } from '../config.js'
 import { fromKey, slotStarts } from './availability.js'
+import { DEFAULT_SHOP_SETTINGS, fromApi, slotFor } from './shopSettings.js'
 
 const KEYS = {
   bookings: 'vicbless.bookings', // bookings made through the site
   blocks: 'vicbless.blocks', // time Vic blocked off
   cancelledSamples: 'vicbless.cancelledSamples', // sample bookings Vic cancelled in the dashboard
+  shopSettings: 'vicbless.shopSettings', // services, prices and appointment lengths Vic saved (API shape)
 }
 
 function read(key) {
@@ -35,13 +37,38 @@ export const writeBlocks = (list) => write(KEYS.blocks, list)
 export const readCancelledSamples = () => read(KEYS.cancelledSamples)
 export const writeCancelledSamples = (list) => write(KEYS.cancelledSamples, list)
 
-// The time blocks on `dateKey` that are covered by blocked-off time.
+// The shop settings Vic saved in this browser (the services and the appointment lengths), or the starting ones.
+export function readShopSettings() {
+  try {
+    return fromApi(JSON.parse(localStorage.getItem(KEYS.shopSettings) || 'null')) || DEFAULT_SHOP_SETTINGS
+  } catch {
+    return DEFAULT_SHOP_SETTINGS
+  }
+}
+
+// `body` is the API shape ({ services, slotMinutes: { mon: 45 ... } }).
+export function writeShopSettings(body) {
+  try {
+    localStorage.setItem(KEYS.shopSettings, JSON.stringify(body))
+  } catch {
+    /* storage blocked: the change just will not survive a reload */
+  }
+}
+
+// How long an appointment is on `dateKey` right now.
+export const slotMinutesOn = (dateKey) => slotFor(readShopSettings(), fromKey(dateKey))
+
+// True when the times [aStart, aEnd) and [bStart, bEnd) share any minute.
+export const overlaps = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd
+
+// The appointment starts on `dateKey` that touch blocked-off time.
 export function blockedStartsFor(dateKey) {
   const blocks = readBlocks().filter((b) => b.dateKey === dateKey)
   const out = new Set()
   if (blocks.length === 0) return out
-  for (const s of slotStarts(fromKey(dateKey), HOURS, SLOT_MINUTES)) {
-    if (blocks.some((b) => s >= b.start && s < b.end)) out.add(s)
+  const slot = slotMinutesOn(dateKey)
+  for (const s of slotStarts(fromKey(dateKey), HOURS, slot)) {
+    if (blocks.some((b) => overlaps(s, s + slot, b.start, b.end))) out.add(s)
   }
   return out
 }

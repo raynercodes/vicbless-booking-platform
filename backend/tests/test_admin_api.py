@@ -122,7 +122,7 @@ def test_part_day_block_hides_times(client, auth):
     assert r.status_code == 201
     block = r.json()
     assert block["whole"] is False and block["note"] == "Lunch" and block["start"] == 720 and block["end"] == 790
-    assert client.get(f"/api/availability?from={D}&to={D}").json()[D] == {"busy": [720, 755], "dayOff": False}
+    assert client.get(f"/api/availability?from={D}&to={D}").json()[D] == {"busy": [720, 755], "dayOff": False, "slotMinutes": 35}
     assert client.post("/api/bookings", json=booking_body()).status_code == 409
     assert schedule_of(client, auth)["blocks"][0]["id"] == block["id"]
     assert client.delete(f"/api/admin/blocks/{block['id']}", headers=auth).status_code == 200

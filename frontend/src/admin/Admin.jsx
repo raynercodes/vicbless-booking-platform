@@ -4,6 +4,7 @@ import SiteMenu from '../components/SiteMenu.jsx'
 import { copyrightLine } from '../lib/format.js'
 import Greeting from './Greeting.jsx'
 import Schedule from './Schedule.jsx'
+import SettingsPanel from './SettingsPanel.jsx'
 import SignIn from './SignIn.jsx'
 import LoopingLogo from './LoopingLogo.jsx'
 import { pickGreeting } from './greetings.js'
@@ -22,6 +23,7 @@ function readLastGreeting() {
 
 export default function Admin() {
   const [signedIn, setSignedIn] = useState(isSignedIn)
+  const [view, setView] = useState('schedule') // 'schedule' | 'settings' (Menu > Settings > Shop settings)
 
   // One greeting per visit: the sign-in screen and the dashboard show the same one, and the next
   // visit gets a different one.
@@ -60,7 +62,21 @@ export default function Admin() {
   return (
     <main className="admin">
       <header className="admin-bar">
-        <SiteMenu>
+        <SiteMenu
+          settingsExtra={({ close }) => (
+            <button
+              type="button"
+              className="menu-link"
+              onClick={() => {
+                setView('settings')
+                close()
+                window.scrollTo?.({ top: 0 })
+              }}
+            >
+              Shop settings
+            </button>
+          )}
+        >
           <a className="menu-link" href="#/">
             View site
           </a>
@@ -87,7 +103,7 @@ export default function Admin() {
         </p>
       )}
 
-      <Schedule />
+      {view === 'settings' ? <SettingsPanel onClose={() => setView('schedule')} /> : <Schedule />}
 
       <footer className="admin-foot">{copyrightLine()}</footer>
     </main>

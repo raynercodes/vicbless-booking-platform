@@ -3,7 +3,9 @@
 from datetime import date
 
 from app.database import bookings as bookings_db
+from app.database import keys
 from app.database import schedule as schedule_db
+from app.domain import shop
 from app.domain.models import Booking
 
 from .constants import TUESDAY
@@ -35,6 +37,7 @@ def booking_model(**over) -> Booking:
         start=720,
         minutes=35,
         service_id="mens-cut",
+        service_name="Men's haircut",
         name="Marcus Jones",
         phone="5550101234",
         email="m@example.com",
@@ -51,6 +54,7 @@ def make_booking(start=720, minutes=35, phone="5550101234", day=date(2026, 10, 1
         day=day,
         start=start,
         service_id="mens-cut",
+        service_name="Men's haircut",
         minutes=minutes,
         name="A Person",
         phone=phone,
@@ -63,5 +67,11 @@ def make_booking(start=720, minutes=35, phone="5550101234", day=date(2026, 10, 1
 
 
 def taken_blocks(day: date = date(2026, 10, 13)) -> list[int]:
-    """The taken block starts for one day, as the database reports them."""
-    return schedule_db.availability(day, day)[day.isoformat()]["busy"]
+    """The taken appointment starts for one day, as the database reports them (with the settings tests use)."""
+    return schedule_db.availability(day, day, shop.DEFAULT_SETTINGS)[day.isoformat()]["busy"]
+
+
+def taken_units(day: date = date(2026, 10, 13)) -> list[int]:
+    """Every 5 minute unit that is claimed on one day, straight from the claim items."""
+    items = schedule_db.query_range(f"{day.isoformat()}#CLAIM#", f"{day.isoformat()}#CLAIM#~")
+    return sorted(keys.minutes_of(item["sk"].split("#")[2]) for item in items)

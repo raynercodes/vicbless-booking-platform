@@ -15,7 +15,8 @@ ALLOWED = {
     "schemas": {"core", "domain"},
     "database": {"core", "domain"},
     "emailing": {"core", "domain"},
-    "services": {"core", "domain", "schemas", "database", "emailing"},
+    "texting": {"core", "domain"},
+    "services": {"core", "domain", "schemas", "database", "emailing", "texting"},
     "routes": {"core", "domain", "schemas", "services"},
 }
 WEB_OK = {"routes", "core/web.py", "main.py", "handler.py"}  # the only places that may import fastapi / starlette

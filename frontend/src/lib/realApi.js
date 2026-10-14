@@ -1,6 +1,7 @@
 // The real customer-facing data layer: the same functions as mockApi.js, backed by the API.
 //
 //   getAvailability(dateKeys) -> GET  /api/availability?from=&to=
+//   getShopSettings()         -> GET  /api/settings
 //   createBooking(data)       -> POST /api/bookings
 //
 // Return shapes match the mock exactly, so the pages do not know which one they are talking to.
@@ -39,6 +40,9 @@ export async function getAvailability(dateKeys) {
   return Object.fromEntries(keys.map((k) => [k, result[k] || { busy: [], dayOff: false }]))
 }
 
+// The services, prices and appointment lengths Vic has set (customers read them to draw the pages).
+export const getShopSettings = () => request('GET', '/settings')
+
 // Just the taken times (the admin mock uses this one; kept so both layers have the same exports).
 export async function getBusy(dateKeys) {
   const availability = await getAvailability(dateKeys)
@@ -60,6 +64,7 @@ export async function createBooking(payload) {
         phone: payload.phone,
         email: payload.email,
         notes: payload.notes,
+        smsConsent: payload.smsConsent === true, // only a ticked box counts as a yes
         // `minutes` is deliberately not sent: the API looks the length up from the service.
       },
     })

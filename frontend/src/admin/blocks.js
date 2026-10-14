@@ -1,4 +1,4 @@
-import { blocksFor, fmtTime, slotStarts } from '../lib/availability.js'
+import { fmtTime, slotStarts } from '../lib/availability.js'
 
 // The rules behind "Block off time". Pure, so they are easy to test.
 // A block is { dateKey, start, end, note, whole }: it covers every time block that starts at or
@@ -30,16 +30,14 @@ export function startsInRange(grid, { start, end }) {
 }
 
 // What a new block would run into: bookings inside it, and blocked time that is already there.
-export function findConflicts({ range, grid, items, blocks, slotMinutes = 35 }) {
-  const wanted = new Set(startsInRange(grid, range))
-  const bookings = items.filter((item) => {
-    for (let k = 0; k < blocksFor(item.minutes, slotMinutes); k++) {
-      if (wanted.has(item.start + k * slotMinutes)) return true
-    }
-    return false
-  })
-  const alreadyBlocked = blocks.filter((b) => startsInRange(grid, b).some((s) => wanted.has(s)))
-  return { bookings, blocks: alreadyBlocked }
+// Anything that shares even a minute with the range counts, whatever appointment length it was made with
+// (a booking made on an older 35 minute schedule can sit across the edge of today's 45 minute times).
+export function findConflicts({ range, items, blocks }) {
+  const touches = (start, end) => start < range.end && range.start < end
+  return {
+    bookings: items.filter((item) => touches(item.start, item.start + item.minutes)),
+    blocks: blocks.filter((b) => touches(b.start, b.end)),
+  }
 }
 
 export const describeRange = (start, end) => `${fmtTime(start)} to ${fmtTime(end)}`

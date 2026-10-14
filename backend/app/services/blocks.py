@@ -23,8 +23,8 @@ def add_block(data: BlockIn, now: datetime) -> Block:
         start, end = data.start, data.end
         if end <= start:
             raise ValidationFailed("The end time has to be after the start time.")
-    # Turn the range into the individual 35-minute blocks it covers.
-    claims = shop.block_starts_in_range(day, start, end)
+    # Turn the range into the 5 minute units it covers (only inside opening hours).
+    claims = shop.block_units(day, start, end)
     if not claims:
         raise InvalidSlot("Pick times that fall inside opening hours.")
     # The database refuses (Conflict) if any of those blocks already holds a booking or another block-off.

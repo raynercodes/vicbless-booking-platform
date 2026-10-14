@@ -3,7 +3,9 @@
 
 export const BUSINESS = {
   name: 'Vicbless Barbershop',
-  phone: '(555) 010-0123', // PLACEHOLDER
+  // How customers reach Vic. The site shows this email wherever it used to show the phone number.
+  email: 'vicslegacy89@gmail.com',
+  phone: '(555) 010-0123', // PLACEHOLDER, not shown anywhere on the site right now
   address: ['656 S Main St, Suite C', 'Baxley, GA 31513'],
 }
 
@@ -33,13 +35,17 @@ export const HOURS = {
   ],
 }
 
-// price is the starting price. from: true shows it as "$65+".
+// What Vic can change from his dashboard (Settings > Shop settings): the services with their prices, and how long
+// an appointment is on each weekday. The real values live in the database; these are the shop's STARTING values.
+// The site shows them until the API answers and keeps using them if it never does, and the backend starts from the
+// same numbers (a backend test fails if the two ever differ).
+//
+// price is the starting price in whole dollars. from: true shows it as "$65+".
 export const SERVICES = [
-  { id: 'mens-cut', name: "Men's haircut", minutes: 35, price: 55 },
+  { id: 'mens-cut', name: "Men's haircut", price: 55 },
   {
     id: 'mens-design',
     name: "Men's haircut with design",
-    minutes: 35,
     price: 65,
     from: true,
     note: 'Small or freestyle design',
@@ -47,7 +53,6 @@ export const SERVICES = [
   {
     id: 'mens-beard-eyebrow',
     name: "Men's haircut with beard and eyebrow",
-    minutes: 35,
     price: 65,
     from: true,
     note: 'Includes free hot towel if requested and hair styling',
@@ -55,24 +60,36 @@ export const SERVICES = [
   {
     id: 'buzz-beard',
     name: 'Head buzzed/shave and beard',
-    minutes: 30,
     price: 40,
     note: 'Same price for just beards. Tell Vic in person if you want it buzzed or shaved.',
   },
   {
     id: 'kids-design',
     name: 'Kids cut (12 and under) with design',
-    minutes: 30,
     price: 40,
     from: true,
     note: '$5 extra for a small design, $10 more for a bigger design',
   },
 ]
 
-// Vic books in 35 minute blocks (Saturday's 12:35 restart follows the same rhythm).
-// Every service fits in one block, longer ones would take several.
-export const SLOT_MINUTES = 35
+// How long one appointment is on each weekday, in minutes (0 = Sunday). Every service takes one appointment.
+// Monday and Tuesday are 45 minutes (Vic's request); the other days are 35. Vic can change any day in 5 minute steps.
+export const SLOT_MINUTES_BY_DAY = { 0: 35, 1: 45, 2: 45, 3: 35, 4: 35, 5: 35, 6: 35 }
+export const SLOT_MIN = 15 // the shortest appointment Vic can set
+export const SLOT_MAX = 120 // the longest
+export const SLOT_STEP = 5 // lengths go up in steps of this many minutes
+export const MAX_SERVICES = 12
 export const DAYS_AHEAD = 14
+
+// Appointment reminders. Vic switches each of these on or off in Shop settings. The numbers are hours before the
+// appointment; the backend accepts exactly these (a backend test checks). Reminders go out by email and, for customers
+// who ticked the box below, by text.
+export const REMINDER_CHOICES = [48, 24, 12, 6, 4, 3, 2, 1]
+export const REMINDER_HOURS_DEFAULT = [24, 2]
+
+// The tick box on the booking form. Left unticked until the customer ticks it (texting someone needs their yes).
+// Texts are sent for the confirmation, the reminders and any change Vic makes to the appointment.
+export const SMS_CONSENT = 'Text me my confirmation, reminders and any changes. Msg & data rates may apply. Reply STOP to opt out.'
 
 // The branded call to action. Used on every booking button.
 export const CTA_TEXT = 'Book here to get blessed'

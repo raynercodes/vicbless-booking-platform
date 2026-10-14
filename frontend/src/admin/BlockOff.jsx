@@ -1,14 +1,18 @@
 import { useMemo, useState } from 'react'
-import { HOURS, SLOT_MINUTES } from '../config.js'
+import { HOURS } from '../config.js'
 import { fmtTime, fromKey } from '../lib/availability.js'
 import { dayGrid, describeRange, findConflicts, rangeFromChoice, wholeDayRange } from './blocks.js'
+import { slotFor } from '../lib/shopSettings.js'
+import { useShopSettings } from '../lib/useShopSettings.js'
 import { addBlock } from './adminApi.js'
 
 // "Block off time": part of the day or the whole day, with an optional note (Lunch, Phone booking...).
 // It will not let Vic block over a booking or over time that is already blocked, and says which.
 export default function BlockOff({ dateKey, items, blocks, onSaved, onClose }) {
+  const shop = useShopSettings()
   const date = useMemo(() => fromKey(dateKey), [dateKey])
-  const grid = useMemo(() => dayGrid({ date, hours: HOURS, slotMinutes: SLOT_MINUTES }), [date])
+  const SLOT_MINUTES = slotFor(shop, date) // how long an appointment is on this day
+  const grid = useMemo(() => dayGrid({ date, hours: HOURS, slotMinutes: SLOT_MINUTES }), [date, SLOT_MINUTES])
 
   const [mode, setMode] = useState('part')
   const [from, setFrom] = useState(grid[0])
