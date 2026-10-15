@@ -1158,11 +1158,22 @@
   white-space: nowrap;
 }
 
-.admin-code {
-  font-size: 0.92rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+.admin-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-card .admin-code {
+  flex: none;
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
 }
 
 .admin-phone-row {

@@ -44,14 +44,20 @@ function BookingCard({ item, ctl }) {
   const moving = ctl.isMoving(item)
   return (
     <article className="admin-card">
-      <h3>
-        {item.name}
-        {item.source === 'sample' && <span className="admin-sample-badge">sample</span>}
-      </h3>
+      <div className="admin-card-head">
+        <h3>
+          {item.name}
+          {item.source === 'sample' && <span className="admin-sample-badge">sample</span>}
+        </h3>
+        {item.source !== 'sample' && item.code && (
+          <p className="admin-code" aria-label="Booking code">
+            {item.code}
+          </p>
+        )}
+      </div>
       <p className="admin-meta">
         {serviceName}, {item.minutes} min
       </p>
-      {item.source !== 'sample' && item.code && <p className="admin-code">Code {item.code}</p>}
       {item.phone && (
         <div className="admin-phone-row">
           {tel ? (
