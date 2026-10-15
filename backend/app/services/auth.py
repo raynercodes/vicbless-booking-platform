@@ -45,8 +45,13 @@ def check_bearer(authorization: str | None) -> None:
     """
     scheme, _, token = (authorization or "").partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
+        log("auth_rejected", reason="no_token")
         raise Unauthorized()
     secret = config.params.get("jwt-secret")
     if not secret:
         raise NotConfigured(NOT_SET_UP)
-    security.check_token(token.strip(), secret)
+    try:
+        security.check_token(token.strip(), secret)
+    except Unauthorized:
+        log("auth_rejected", reason="bad_or_expired_token")  # a dashboard left open past its 12 hours shows up here
+        raise

@@ -111,7 +111,8 @@ def test_a_low_quota_is_noted_in_the_logs(monkeypatch):
     seen = watch_logs(monkeypatch)
     fake_urlopen(monkeypatch, {"success": True, "quotaRemaining": 4})
     TextbeltSender(api_key="k").send(SmsMessage(to="5550100777", body="x"))
-    assert seen[0][0] == "sms_quota_low"
+    assert "sms_quota_low" in [event for event, _ in seen]
+    assert "sms_accepted" in [event for event, _ in seen]
 
 
 # --- picking the provider ---------------------------------------------------------------------------------
@@ -249,3 +250,38 @@ def test_the_reminder_email_is_branded_and_has_the_details():
     assert "Reminder" in message.subject and "Tuesday, October 13 at 12:00 pm" in message.subject
     for part in (message.text, message.html):
         assert "VB-ABC234" in part and "VICBLESS BARBERSHOP" in part and "656 S Main St" in part
+
+
+# --- Textbelt refuses anything that looks like a link -----------------------------------------------------------
+
+
+def looks_like_a_link(body: str) -> bool:
+    import re
+
+    return bool(re.search(r"[\w-]\.[A-Za-z]{2,}|@|https?:|www\.", body))
+
+
+def test_no_text_can_contain_something_that_looks_like_a_web_or_email_address():
+    hostile = booking_model(name="Shop.com Bob@mail.net", service_name="Visit www.deal.io/now: cut")
+    other = booking_model(start=765)
+    bodies = [
+        templates.owner_new_booking(hostile),
+        templates.customer_confirmation(hostile),
+        templates.customer_cancellation(hostile),
+        templates.customer_rescheduled(hostile, other),
+        templates.customer_reminder(hostile),
+        templates.customer_confirmation(booking_model()),
+        templates.customer_reminder(booking_model()),
+    ]
+    for body in bodies:
+        assert not looks_like_a_link(body), body
+    assert "vicslegacy89" not in " ".join(bodies)
+
+
+def test_textbelts_own_reason_is_logged_in_full(monkeypatch):
+    seen = watch_logs(monkeypatch)
+    reason = "Sorry, ability to send URLs via text is limited to verified accounts. Please go to the verification page."
+    fake_urlopen(monkeypatch, {"success": False, "error": reason})
+    with pytest.raises(SmsSendError):
+        TextbeltSender(api_key="k").send(SmsMessage(to="5550100777", body="x"))
+    assert seen[0][1]["reason"] == reason

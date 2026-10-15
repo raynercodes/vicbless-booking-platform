@@ -241,6 +241,22 @@ Resources:
                   - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis
                   - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*
                   - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/tags/*
+              # The reminder timer (an EventBridge rule that wakes the function every 15 minutes). The rule is named after
+              # the backend stack, so this only covers rules that stack creates.
+              - Sid: ReminderSchedule
+                Effect: Allow
+                Action:
+                  - events:PutRule
+                  - events:DeleteRule
+                  - events:DescribeRule
+                  - events:EnableRule
+                  - events:DisableRule
+                  - events:PutTargets
+                  - events:RemoveTargets
+                  - events:ListTargetsByRule
+                  - events:TagResource
+                  - events:UntagResource
+                Resource: !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/vicbless-backend-*
               - Sid: Tables
                 Effect: Allow
                 Action: dynamodb:*

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+import traceback
 import uuid
 
 from fastapi import FastAPI, Request
@@ -43,6 +44,8 @@ def add_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError):
         extra = {"field": exc.field} if exc.field else {}
+        # Why a request was refused (slot_taken, invalid_slot, unauthorized ...), so CloudWatch shows more than a status number.
+        log("api_error", logging.WARNING if exc.status >= 500 else logging.INFO, code=exc.code, status=exc.status, field=exc.field or "")
         return error_response(exc.status, exc.code, exc.message, **extra)
 
     @app.exception_handler(RequestValidationError)
@@ -50,6 +53,7 @@ def add_error_handlers(app: FastAPI) -> None:
         # Only the first problem is reported, so the person fixes one thing at a time.
         first = exc.errors()[0] if exc.errors() else {}
         field = ".".join(str(p) for p in first.get("loc", ()) if p not in ("body", "query"))
+        log("validation_failed", field=field, kind=first.get("type", ""))  # which field, never what was typed
         if first.get("type") == "value_error":
             # Our own validators (schemas/requests.py) wrote this sentence for people. Show it as it is.
             message = str(first.get("msg", "")).removeprefix("Value error, ")
@@ -95,7 +99,10 @@ def add_middleware(app: FastAPI) -> None:
                 try:
                     response = await call_next(request)
                 except Exception as exc:
-                    log("unhandled_error", logging.ERROR, errorType=type(exc).__name__, path=request.url.path)
+                    # Where it happened (file:line function, innermost last) but never the error's own text, which could
+                    # contain what a customer typed.
+                    frames = [f"{f.filename.split('/')[-1]}:{f.lineno} {f.name}" for f in traceback.extract_tb(exc.__traceback__)][-8:]
+                    log("unhandled_error", logging.ERROR, errorType=type(exc).__name__, path=request.url.path, frames=frames)
                     # The real error goes to the logs only. The caller never sees internal details.
                     response = error_response(500, "server_error", "Something went wrong on our side. Please try again.")
             for name, value in SECURITY_HEADERS.items():

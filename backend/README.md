@@ -76,6 +76,20 @@ with `--apply`. It only adds free claims, is safe to repeat, and reports (never 
 `email-from` (String). `app-version` is written by the deploy workflow.
 Make the first three with `python backend/scripts/hash_password.py --env dev`.
 
+## Reading the logs (CloudWatch)
+Log group `/aws/lambda/vicbless-api-<env>`. Every line is JSON with an `event` and the request's `requestId`. Never any names,
+phone numbers, emails or keys. In CloudWatch Logs Insights, pick the log group and try:
+```
+fields @timestamp, event, kind, to, reason, provider | filter event like /sms_|email_/ | sort @timestamp desc | limit 50
+fields @timestamp, event, bookingId, smsConsent, hasEmail | filter event like /booking_/ | sort @timestamp desc
+fields @timestamp, event, code, status, field | filter event in ["api_error","validation_failed","unhandled_error"] | sort @timestamp desc
+fields @timestamp, event, name, code | filter event in ["param_missing","param_error"] | sort @timestamp desc
+fields @timestamp, event, examined, sent, errors | filter event in ["scheduled_event","reminders_swept"] | sort @timestamp desc
+```
+The events that answer "why no text?": `sms_sent` (went to Textbelt and was accepted), `sms_skipped` + `reason` (`no_consent`,
+`no_owner_phone`, `bad_number`, `no_provider`), `sms_error`/`sms_failed` (Textbelt refused it, `reason` is their words), `sms_accepted`
+(Textbelt's id and the credit left), `param_missing name=textbelt-key` (the key was never stored).
+
 ## Texts and reminders
 Textbelt for now (`app/texting/textbelt.py`). Setup per environment (run with `AWS_PROFILE=vicbless`):
 `textbelt-key` (SecureString: the key bought at textbelt.com; the key `textbelt` is a free test key, about one text a

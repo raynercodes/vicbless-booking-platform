@@ -59,9 +59,10 @@ class TextbeltSender:
             raise SmsSendError("Could not reach Textbelt") from None
         if not isinstance(answer, dict) or not answer.get("success"):
             # Textbelt's own reason ("Out of quota", "Invalid phone number") is safe to log: it has no personal details.
-            reason = str(answer.get("error", "unknown"))[:80] if isinstance(answer, dict) else "unknown"
+            reason = str(answer.get("error", "unknown"))[:200] if isinstance(answer, dict) else "unknown"
             log("sms_failed", provider="textbelt", reason=reason)
             raise SmsSendError("Textbelt refused the text")
         remaining = answer.get("quotaRemaining")
+        log("sms_accepted", provider="textbelt", textId=str(answer.get("textId", ""))[:40], quotaRemaining=remaining)
         if isinstance(remaining, (int, float)) and remaining <= 10:
             log("sms_quota_low", provider="textbelt", remaining=remaining)  # a nudge in the logs to buy more credit

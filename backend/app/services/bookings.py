@@ -11,6 +11,7 @@ from datetime import date, datetime
 
 from ..core.brand import CONTACT_EMAIL
 from ..core.errors import NotFound, SlotTaken, TooManyBookings, ValidationFailed
+from ..core.logs import log
 from ..database import bookings as bookings_db
 from ..database import schedule
 from ..domain import shop
@@ -74,7 +75,9 @@ def create_booking(data: BookingIn, now: datetime) -> tuple[Booking, bool]:
         # The cap is reached, but a retry of an already-made booking must still be answered with it.
         replay = earlier_attempt()
         if replay:
+            log("booking_replayed", bookingId=replay.id)
             return replay, False
+        log("booking_refused", reason="too_many_upcoming")
         raise TooManyBookings(
             f"This phone number already has {MAX_UPCOMING_PER_PHONE} upcoming bookings, which is the most we allow. "
             f"Please email Vic at {CONTACT_EMAIL} if you need to change one."
@@ -97,14 +100,26 @@ def create_booking(data: BookingIn, now: datetime) -> tuple[Booking, bool]:
         # Someone holds the time. If that someone is this very request (a retry), hand it back.
         replay = earlier_attempt()
         if replay:
+            log("booking_replayed", bookingId=replay.id)  # the same request arrived twice; the first one stands
             return replay, False
+        log("booking_refused", reason="slot_taken", date=data.dateKey, start=data.start)
         raise
+    log(
+        "booking_created",
+        bookingId=booking.id,
+        serviceId=booking.service_id,
+        minutes=booking.minutes,
+        hasEmail=bool(booking.email),
+        smsConsent=booking.sms_consent,
+    )
     return booking, True
 
 
 def cancel_booking(booking_id: str) -> Booking:
     """Vic cancels a booking. Frees every block it held, and returns it so the customer can be told."""
-    return bookings_db.cancel_booking(booking_id)
+    booking = bookings_db.cancel_booking(booking_id)
+    log("booking_cancelled", bookingId=booking.id, smsConsent=booking.sms_consent, hasEmail=bool(booking.email))
+    return booking
 
 
 def move_booking(booking_id: str, data: MoveIn, now: datetime) -> tuple[Booking, Booking]:
@@ -121,4 +136,5 @@ def move_booking(booking_id: str, data: MoveIn, now: datetime) -> tuple[Booking,
     minutes = settings_service.current().slot_for(day)  # the booking takes the new day's appointment length
     shop.check_movable(day, data.start, minutes, now)
     after = bookings_db.move_booking(before, day=day, start=data.start, minutes=minutes)  # raises SlotTaken if not free
+    log("booking_moved", fromId=before.id, toId=after.id, minutes=minutes)
     return before, after

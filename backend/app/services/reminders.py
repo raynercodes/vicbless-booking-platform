@@ -50,6 +50,7 @@ def _handle(booking: Booking, hours_list: tuple[int, ...], now: datetime) -> boo
             continue
         if moment < changed:  # already in the past when it was booked or moved: skip it for good
             reminders_db.claim(booking, tag)
+            log("reminder_skipped", bookingId=booking.id, tag=tag, reason="past_when_booked")
             continue
         due.append(hours)
     if not due:
@@ -60,6 +61,7 @@ def _handle(booking: Booking, hours_list: tuple[int, ...], now: datetime) -> boo
             reminders_db.claim(booking, _tag(hours))  # an older one that was overtaken: mark it, send only the nearest
     if not reminders_db.claim(booking, _tag(nearest)):
         return False
+    log("reminder_sending", bookingId=booking.id, tag=_tag(nearest), smsConsent=booking.sms_consent, hasEmail=bool(booking.email))
     notifications.booking_reminder(booking)
     return True
 
@@ -70,15 +72,17 @@ def send_due(now: datetime | None = None) -> dict[str, int]:
     hours_list = settings_service.current().reminder_hours
     result = {"sent": 0, "errors": 0}
     if not hours_list:
+        log("reminders_swept", sent=0, errors=0, examined=0, note="no reminder times are switched on")
         return result
     first = shop.today(moment)
     last: date = first + timedelta(days=max(hours_list) // 24 + 2)
-    for booking in reminders_db.upcoming(first, last):
+    upcoming = reminders_db.upcoming(first, last)
+    for booking in upcoming:
         try:
             if _handle(booking, hours_list, moment):
                 result["sent"] += 1
         except Exception as exc:  # one broken booking must not stop everyone else's reminder
             result["errors"] += 1
             log("reminder_error", reason=type(exc).__name__)
-    log("reminders_swept", **result)
+    log("reminders_swept", examined=len(upcoming), reminderHours=list(hours_list), **result)
     return result

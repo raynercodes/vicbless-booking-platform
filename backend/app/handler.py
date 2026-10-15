@@ -6,6 +6,7 @@
 
 from mangum import Mangum
 
+from .core.logs import log
 from .main import app
 from .services import reminders
 
@@ -15,5 +16,6 @@ _web = Mangum(app, lifespan="off")
 def lambda_handler(event, context):
     # A scheduled EventBridge event says source "aws.events". Web requests never do.
     if isinstance(event, dict) and event.get("source") == "aws.events":
+        log("scheduled_event", kind="reminders")  # proves the 15 minute timer is firing
         return reminders.send_due()
     return _web(event, context)

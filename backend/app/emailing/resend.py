@@ -65,6 +65,7 @@ class ResendSender:
             try:
                 with urllib.request.urlopen(self._request(message), timeout=TIMEOUT_SECONDS) as response:
                     response.read()
+                    log("email_accepted", provider="resend", status=getattr(response, "status", 200), attempt=attempt)
                 return
             except urllib.error.HTTPError as err:
                 if err.code == 429 and attempt == 1:

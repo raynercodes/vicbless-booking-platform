@@ -13,6 +13,7 @@ import threading
 import time
 
 from ..core import config
+from ..core.logs import log
 from ..database import settings as settings_db
 from ..domain import shop
 from ..schemas.requests import SettingsIn
@@ -70,6 +71,7 @@ def save(data: SettingsIn) -> shop.ShopSettings:
         ),
     )
     settings_db.save(updated)
+    log("settings_saved", services=len(updated.services), slotMinutes=list(updated.slot_minutes), reminderHours=list(updated.reminder_hours))
     global _cached
     with _lock:
         _cached = (time.monotonic(), updated)

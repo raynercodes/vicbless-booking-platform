@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 
 from . import aws
+from .logs import log
 
 # How long a secret stays cached in memory. Reading from AWS on every request would be slow and cost money;
 # five minutes means a changed secret takes effect within five minutes without a redeploy.
@@ -67,7 +68,9 @@ class ParamStore:
             code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
             if code != "ParameterNotFound":
                 # a real failure (permissions, AWS hiccup) is not cached as "missing" for five minutes
+                log("param_error", name=name, code=code or type(exc).__name__)
                 raise
+            log("param_missing", name=name)  # the name only, never the value. Shows up once per five minutes at most
             value = None
         with self._lock:
             self._cache[full] = (now, value)

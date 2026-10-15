@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..core.errors import InvalidSlot, ValidationFailed
+from ..core.logs import log
 from ..database import blocks as blocks_db
 from ..domain import shop
 from ..domain.models import Block
@@ -28,9 +29,13 @@ def add_block(data: BlockIn, now: datetime) -> Block:
     if not claims:
         raise InvalidSlot("Pick times that fall inside opening hours.")
     # The database refuses (Conflict) if any of those blocks already holds a booking or another block-off.
-    return blocks_db.create_block(day=day, claims=claims, start=start, end=end, note=data.note or "", whole=data.whole)
+    block = blocks_db.create_block(day=day, claims=claims, start=start, end=end, note=data.note or "", whole=data.whole)
+    log("block_created", blockId=block.id, whole=block.whole, units=len(claims))
+    return block
 
 
 def remove_block(block_id: str) -> Block:
     """Opens blocked-off time back up."""
-    return blocks_db.delete_block(block_id)
+    block = blocks_db.delete_block(block_id)
+    log("block_removed", blockId=block.id, whole=block.whole)
+    return block
