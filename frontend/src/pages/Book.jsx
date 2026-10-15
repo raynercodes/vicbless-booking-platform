@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import EmailLink from '../components/EmailLink.jsx'
+import LogoCheckerboard from '../components/LogoCheckerboard.jsx'
 import Reveal from '../components/Reveal.jsx'
 import { DAYS_AHEAD, HOURS, LIMITS, SMS_CONSENT, STAFF, SUCCESS_HEADLINE } from '../config.js'
 import { fmtTime, fromKey, keyOf, slotsForDay, startsForDay } from '../lib/availability.js'
@@ -195,6 +196,7 @@ export default function Book() {
     const booked = { ...(current || { price: 0 }), name: done.serviceName || (current && current.name) || 'Appointment' }
     return (
       <main className="book book-done">
+        <LogoCheckerboard />
         <section className="done" aria-live="polite">
           <Reveal as="h1" from="above" className="done-headline">
             <span>{SUCCESS_HEADLINE[0]}</span> <span className="done-line-2">{SUCCESS_HEADLINE[1]}</span>

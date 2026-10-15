@@ -33,7 +33,7 @@ describe('cancel message', () => {
 
 describe('texts label', () => {
   it('has a mark and words either way', () => {
-    expect(textsLabel({ smsConsent: true })).toEqual({ mark: '✓', words: 'Texts OK', on: true })
-    expect(textsLabel({})).toEqual({ mark: '✗', words: 'No texts', on: false })
+    expect(textsLabel({ smsConsent: true })).toEqual({ mark: '✓', words: 'Text Reminders', on: true })
+    expect(textsLabel({})).toEqual({ mark: '✗', words: 'No Text Reminders', on: false })
   })
 })

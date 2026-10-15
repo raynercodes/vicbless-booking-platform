@@ -16,5 +16,5 @@ export function cancelMessage(item, timeLabel, serviceName) {
 
 // The short label beside the phone number. The mark and the words both say it, so colour is never the only clue.
 export function textsLabel(item) {
-  return item.smsConsent === true ? { mark: '✓', words: 'Texts OK', on: true } : { mark: '✗', words: 'No texts', on: false }
+  return item.smsConsent === true ? { mark: '✓', words: 'Text Reminders', on: true } : { mark: '✗', words: 'No Text Reminders', on: false }
 }

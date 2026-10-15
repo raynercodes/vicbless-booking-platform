@@ -1386,3 +1386,25 @@ html[data-motion='off'] {
 html[data-motion='off'] .logo-coin {
   animation: none;
 }
+
+/* The logo checkerboard behind the booking success screen. */
+.book-done {
+  position: relative;
+}
+
+.logo-checker {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.1;
+}
+
+.logo-checker path {
+  fill: var(--accent);
+}
+
+.book-done .done {
+  position: relative;
+  z-index: 1;
+}

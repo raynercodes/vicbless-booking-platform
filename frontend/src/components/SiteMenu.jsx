@@ -137,6 +137,7 @@ export default function SiteMenu({ children, settingsExtra }) {
             <Chevron />
           </button>
           <div id="menu-settings" className="menu-sub" hidden={section !== 'settings'}>
+            {settingsExtra && settingsExtra({ close: () => setOpen(false) })}
             <Switch
               id="set-motion"
               label="Motion"
@@ -151,7 +152,6 @@ export default function SiteMenu({ children, settingsExtra }) {
               checked={theme === 'dark'}
               onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             />
-            {settingsExtra && settingsExtra({ close: () => setOpen(false) })}
           </div>
         </div>
 
