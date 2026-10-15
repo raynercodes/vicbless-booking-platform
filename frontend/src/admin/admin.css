@@ -1157,3 +1157,37 @@
   font-size: 0.95rem;
   white-space: nowrap;
 }
+
+.admin-code {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.admin-phone-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.texts-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.texts-on {
+  color: #5fd18a;
+}
+
+.texts-off {
+  color: var(--muted);
+}

@@ -90,7 +90,13 @@ def test_schedule_shows_booking_with_contact_details(client, auth):
     [item] = day["items"]
     assert item["name"] == "Marcus Jones" and item["email"] == "m@example.com" and item["notes"] == "Short on the sides"
     assert item["source"] == "online" and item["code"].startswith("VB-") and item["start"] == 720 and item["dateKey"] == D
-    assert day["blocks"] == []
+    assert item["smsConsent"] is False and day["blocks"] == []
+
+
+def test_schedule_shows_whether_the_customer_agreed_to_texts(client, auth):
+    client.post("/api/bookings", json=booking_body(smsConsent=True))
+    [item] = schedule_of(client, auth)["items"]
+    assert item["smsConsent"] is True
 
 
 def test_cancel_frees_the_time_and_emails_the_customer(client, auth, sent):

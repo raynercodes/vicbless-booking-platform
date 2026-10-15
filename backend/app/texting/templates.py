@@ -44,37 +44,81 @@ def _service(booking: Booking) -> str:
     return service.name if service else booking.service_id
 
 
+def _text(*parts: str) -> str:
+    """Joins the parts of a text with line breaks; '' makes a blank line. Only our own wording passes through here,
+    anything a customer typed has already been through `_line`, which removes line breaks."""
+    return "\n".join(parts)
+
+
 def owner_new_booking(booking: Booking) -> str:
-    return (
-        f"{BRAND_NAME}: New booking. {_line(booking.name, 40)}, {_line(_service(booking), 50)}, {_when(booking)}. "
-        f"Phone {booking.phone}. Code {booking.code}."
+    return _text(
+        f"{BRAND_NAME}",
+        "New booking",
+        "",
+        f"{_line(booking.name, 40)}",
+        f"{_line(_service(booking), 50)}",
+        f"{_when(booking)}",
+        "",
+        f"Phone: {booking.phone}",
+        f"Code: {booking.code}",
     )
 
 
 def customer_confirmation(booking: Booking) -> str:
     first = _line(booking.name.split()[0] if booking.name.split() else "", 20)
-    return (
-        f"{BRAND_NAME}: You're booked, {first}. {_when(booking)} with Vic. Code {booking.code}. Pay at the shop. "
-        f"{EMAIL_HINT} {OPT_OUT}"
+    return _text(
+        f"{BRAND_NAME}",
+        f"You're booked, {first}!" if first else "You're booked!",
+        "",
+        f"{_when(booking)}",
+        f"{_line(_service(booking), 50)} with Vic",
+        f"Code: {booking.code}",
+        "",
+        "Pay at the shop.",
+        EMAIL_HINT,
+        "",
+        OPT_OUT,
     )
 
 
 def customer_cancellation(booking: Booking) -> str:
-    return (
-        f"{BRAND_NAME}: Your appointment on {_when(booking)} was cancelled. You can book a new time anytime on our site. "
-        f"{OPT_OUT}"
+    return _text(
+        f"{BRAND_NAME}",
+        "Your appointment was cancelled.",
+        "",
+        f"Was: {_when(booking)}",
+        "",
+        "You can book a new time anytime on our site.",
+        "",
+        OPT_OUT,
     )
 
 
 def customer_rescheduled(before: Booking, after: Booking) -> str:
-    return (
-        f"{BRAND_NAME}: Your appointment moved to {_when(after)} (it was {_when(before)}). Code {after.code}. "
-        f"Questions? Email Vic (his address is on our site). {OPT_OUT}"
+    return _text(
+        f"{BRAND_NAME}",
+        "Your appointment moved.",
+        "",
+        f"Now: {_when(after)}",
+        f"Was: {_when(before)}",
+        f"Code: {after.code}",
+        "",
+        EMAIL_HINT,
+        "",
+        OPT_OUT,
     )
 
 
 def customer_reminder(booking: Booking) -> str:
-    return (
-        f"{BRAND_NAME}: Reminder, you're booked {_when(booking)} at {ADDRESS_LINES[0]}. Code {booking.code}. "
-        f"Need to change it? Email Vic (his address is on our site). {OPT_OUT}"
+    return _text(
+        f"{BRAND_NAME}",
+        "Reminder: you're booked.",
+        "",
+        f"{_when(booking)}",
+        f"{ADDRESS_LINES[0]}",
+        f"Code: {booking.code}",
+        "",
+        EMAIL_HINT,
+        "",
+        OPT_OUT,
     )

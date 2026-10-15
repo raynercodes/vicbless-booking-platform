@@ -92,6 +92,7 @@ class Booking:
             "email": self.email,
             "notes": self.notes,
             "code": self.code,
+            "smsConsent": self.sms_consent,
         }
 
     def public_view(self) -> dict:

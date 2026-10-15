@@ -91,6 +91,8 @@ function sampleItem(dateKey, start) {
     // about two in three sample customers left an email, so the layout can be seen with and without
     email: h % 3 === 0 ? '' : `${FIRST[h % FIRST.length].toLowerCase()}${h % 97}@example.com`,
     notes: h % 4 === 0 ? NOTES[(h >>> 8) % NOTES.length] : '',
+    // about half of the sample customers agreed to texts
+    smsConsent: (h >>> 3) % 2 === 0,
     code: 'VB-SAMPLE',
   }
 }
@@ -112,6 +114,7 @@ export async function getDay(dateKey) {
     phone: b.phone,
     email: b.email || '',
     notes: b.notes || '',
+    smsConsent: b.smsConsent === true,
     code: b.code,
   }))
 
@@ -226,6 +229,7 @@ export async function moveBooking(item, { dateKey, start }) {
       phone: item.phone,
       email: item.email,
       notes: item.notes,
+      smsConsent: item.smsConsent === true,
       code,
     },
   ])

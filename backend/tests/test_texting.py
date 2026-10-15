@@ -144,8 +144,8 @@ def test_customer_texts_name_the_shop_and_carry_the_opt_out():
         templates.customer_rescheduled(b, booking_model(start=765)),
         templates.customer_reminder(b),
     ):
-        assert body.startswith("VICBLESS BARBERSHOP:") and body.endswith("Reply STOP to opt out.")
-        assert "\n" not in body and len(body) < 300
+        assert body.startswith("VICBLESS BARBERSHOP\n") and body.endswith("Reply STOP to opt out.")
+        assert "\n\n" in body and len(body) < 300  # short lines with blank lines between the parts
 
 
 def test_the_texts_have_the_details_a_customer_needs():
@@ -153,7 +153,7 @@ def test_the_texts_have_the_details_a_customer_needs():
     assert "Tue, Oct 13 at 12:00 pm" in templates.customer_confirmation(b) and "VB-ABC234" in templates.customer_confirmation(b)
     assert "Marcus" in templates.customer_confirmation(b)
     moved = templates.customer_rescheduled(b, booking_model(start=765))
-    assert "12:45 pm" in moved and "was Tue, Oct 13 at 12:00 pm" in moved.replace("it was", "was")
+    assert "12:45 pm" in moved and "Was: Tue, Oct 13 at 12:00 pm" in moved
     assert "656 S Main St" in templates.customer_reminder(b)
 
 
@@ -165,7 +165,9 @@ def test_the_owner_text_has_no_opt_out_and_shows_the_phone():
 def test_what_a_customer_typed_cannot_break_a_text_into_lines():
     b = booking_model(name="Mal\nlory\r\n" + "x" * 80, service_name="Cut\x00\x07 and" + "y" * 100)
     body = templates.owner_new_booking(b)
-    assert "\n" not in body and "\x00" not in body and "x" * 41 not in body and "y" * 51 not in body
+    name_and_service = body.split("\n")[3:5]  # the lines carrying what the customer typed stay one line each
+    assert len(name_and_service) == 2 and all("\r" not in line for line in name_and_service)
+    assert "Mal lory" in body and "\x00" not in body and "x" * 41 not in body and "y" * 51 not in body
 
 
 # --- who gets a text, and when ---------------------------------------------------------------------------------

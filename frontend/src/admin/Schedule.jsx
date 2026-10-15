@@ -12,6 +12,7 @@ import NoteText from './NoteText.jsx'
 import { describeRange } from './blocks.js'
 import { cancelBooking, getDay, removeBlock } from './adminApi.js'
 import { buildDayRows } from './schedule.js'
+import { cancelMessage, textsLabel } from './notify.js'
 
 const Chevron = ({ direction }) => (
   <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
@@ -38,6 +39,7 @@ function BookingCard({ item, ctl }) {
     item.email,
     `Your Vicbless appointment on ${fromKey(item.dateKey).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} at ${fmtTime(item.start)}`,
   )
+  const texts = textsLabel(item)
   const confirming = ctl.isCancelling(item)
   const moving = ctl.isMoving(item)
   return (
@@ -49,14 +51,21 @@ function BookingCard({ item, ctl }) {
       <p className="admin-meta">
         {serviceName}, {item.minutes} min
       </p>
-      {item.phone &&
-        (tel ? (
-          <a className="phone-link" href={tel}>
-            {formatPhone(item.phone)}
-          </a>
-        ) : (
-          <span>{formatPhone(item.phone)}</span>
-        ))}
+      {item.source !== 'sample' && item.code && <p className="admin-code">Code {item.code}</p>}
+      {item.phone && (
+        <div className="admin-phone-row">
+          {tel ? (
+            <a className="phone-link" href={tel}>
+              {formatPhone(item.phone)}
+            </a>
+          ) : (
+            <span>{formatPhone(item.phone)}</span>
+          )}
+          <span className={`texts-badge ${texts.on ? 'texts-on' : 'texts-off'}`} title={texts.on ? 'Agreed to texts' : "Didn't agree to texts"}>
+            <span aria-hidden="true">{texts.mark}</span> {texts.words}
+          </span>
+        </div>
+      )}
       {item.email &&
         (mail ? (
           <a className="email-link" href={mail}>
@@ -77,8 +86,7 @@ function BookingCard({ item, ctl }) {
           onKeep={ctl.keep}
           onYes={() => ctl.doCancel(item)}
         >
-          Cancel {item.name}'s {fmtTime(item.start)} {serviceName}? The time opens up for other customers. If they left an
-          email, they are told it was cancelled.
+          {cancelMessage(item, fmtTime(item.start), serviceName)}
         </ConfirmBox>
       )}
 
