@@ -17,3 +17,12 @@ def client():
 
 def table_name() -> str:
     return config.get_settings().table_name
+
+
+def sales_table():
+    """The sales log's own table (kept apart from the bookings table, so the log is never touched by booking clean-up)."""
+    return aws.dynamodb_resource().Table(config.get_settings().sales_table_name)
+
+
+def sales_table_name() -> str:
+    return config.get_settings().sales_table_name

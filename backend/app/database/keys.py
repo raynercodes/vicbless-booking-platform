@@ -8,6 +8,9 @@
     SETTINGS                              Vic's settings (services, prices, appointment lengths). It has no date in front,
                                           so it never shows up in a day's range and never expires.
 Failed-login counters live under their own partition key (LOCK#...).
+
+Vic's sales log is NOT in this table. It has its own table (the SalesTable of the template), where the partition key is
+SALES_PK and the sort key is "<day>#<sale id>". It never expires, unlike bookings that disappear after 90 days.
 """
 
 from __future__ import annotations
@@ -45,6 +48,14 @@ def booking_sk(day: date, start: int, booking_id: str) -> str:
 def hold_sk(until: str, booking_id: str) -> str:
     """The sort key of the marker for an unpaid online booking. `until` is an ISO UTC time, so the markers sort by it."""
     return f"HOLD#{until}#{booking_id}"
+
+
+SALES_PK = f"SALES#{shop.STAFF_ID}"  # the one partition of the sales table
+
+
+def sale_sk(day: date, sale_id: str) -> str:
+    """The sort key of one line of the sales log, in the sales table. It sorts by day."""
+    return f"{day.isoformat()}#{sale_id}"
 
 
 def block_sk(day: date, start: int, block_id: str) -> str:

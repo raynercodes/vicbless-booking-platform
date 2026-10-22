@@ -9,6 +9,7 @@ const KEYS = {
   bookings: 'vicbless.bookings', // bookings made through the site
   blocks: 'vicbless.blocks', // time Vic blocked off
   cancelledSamples: 'vicbless.cancelledSamples', // sample bookings Vic cancelled in the dashboard
+  sales: 'vicbless.sales', // the sales log Vic keeps by hand
   shopSettings: 'vicbless.shopSettings', // services, prices and appointment lengths Vic saved (API shape)
 }
 
@@ -33,6 +34,8 @@ export const readBookings = () => read(KEYS.bookings)
 export const writeBookings = (list) => write(KEYS.bookings, list)
 export const readBlocks = () => read(KEYS.blocks)
 export const writeBlocks = (list) => write(KEYS.blocks, list)
+export const readSales = () => read(KEYS.sales)
+export const writeSales = (list) => write(KEYS.sales, list)
 export const readCancelledSamples = () => read(KEYS.cancelledSamples)
 export const writeCancelledSamples = (list) => write(KEYS.cancelledSamples, list)
 

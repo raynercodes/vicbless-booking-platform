@@ -308,6 +308,77 @@ class ServiceIn(BaseModel):
         return v
 
 
+SALE_NAME_MAX = 60
+SALE_NOTE_MAX = 120
+MSG_SALE_CLIENT = f"Enter the client's name, up to {SALE_NAME_MAX} characters."
+MSG_SALE_SERVICE = "Pick a service, or type the name of a one-off service."
+MSG_SALE_AMOUNT = "Enter the price as dollars, from $0 to $9,999.99."
+MSG_SALE_NOTE = f"A note can be up to {SALE_NOTE_MAX} characters."
+
+
+class SaleIn(BaseModel):
+    """Vic logging a sale by hand (POST /api/admin/sales)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    serviceId: str | None = None  # one of his services (or After Hours Cuts); left out for a one-off service
+    serviceName: str | None = None  # the name of a one-off service
+    priceMode: Literal["standard", "custom"] = "standard"  # the service's listed price, or one Vic typed
+    amountCents: StrictInt | None = None  # needed for a custom price
+    payment: Literal["shop", "online"] = "shop"
+    clientName: str
+    note: str | None = None
+    dateKey: str | None = None  # the day it happened; left out = today
+
+    @field_validator("serviceId")
+    @classmethod
+    def _service_id(cls, v: str | None) -> str | None:
+        if v in (None, ""):
+            return None
+        if not SERVICE_ID_PATTERN.match(v):
+            raise ValueError(MSG_SALE_SERVICE)
+        return v
+
+    @field_validator("serviceName")
+    @classmethod
+    def _service_name(cls, v: str | None) -> str:
+        v = one_line(v or "")
+        if len(v) > SERVICE_NAME_MAX:
+            raise ValueError(MSG_SALE_SERVICE)
+        return v
+
+    @field_validator("amountCents")
+    @classmethod
+    def _amount(cls, v: int | None) -> int | None:
+        if v is not None and not 0 <= v <= 999_999:
+            raise ValueError(MSG_SALE_AMOUNT)
+        return v
+
+    @field_validator("clientName")
+    @classmethod
+    def _client(cls, v: str) -> str:
+        v = one_line(v)
+        if not 1 <= len(v) <= SALE_NAME_MAX:
+            raise ValueError(MSG_SALE_CLIENT)
+        return v
+
+    @field_validator("note")
+    @classmethod
+    def _note(cls, v: str | None) -> str:
+        v = one_line(v or "")
+        if len(v) > SALE_NOTE_MAX:
+            raise ValueError(MSG_SALE_NOTE)
+        return v
+
+    @field_validator("dateKey")
+    @classmethod
+    def _date(cls, v: str | None) -> str | None:
+        if v in (None, ""):
+            return None
+        parse_date_key(v)
+        return v
+
+
 class AfterHoursIn(BaseModel):
     """Vic's After Hours Cuts settings: its price and description, and how many late appointments each weekday has."""
 

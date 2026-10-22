@@ -12,8 +12,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from ..domain import shop
-from ..schemas.requests import BlockIn, LoginIn, MoveIn, SettingsIn, date_from_query
+from ..schemas.requests import BlockIn, LoginIn, MoveIn, SaleIn, SettingsIn, date_from_query
 from ..services import auth, blocks, bookings, notifications
+from ..services import sales as sales_service
 from ..services import schedule as schedule_service
 from ..services import settings as settings_service
 from .deps import require_admin, source_address
@@ -77,4 +78,30 @@ def add_block(body: BlockIn) -> JSONResponse:
 def remove_block(block_id: str) -> dict:
     """Opens blocked-off time back up."""
     blocks.remove_block(block_id)
+    return {"removed": True}
+
+
+@router.get("/sales")
+def list_sales() -> dict:
+    """Vic's whole sales log, newest first. The dashboard filters, sorts and adds it up."""
+    return {"sales": [s.admin_view() for s in sales_service.list_sales()]}
+
+
+@router.post("/sales")
+def add_sale(body: SaleIn) -> JSONResponse:
+    """Logs a sale Vic entered by hand."""
+    sale = sales_service.add_sale(body, shop.now_local())
+    return JSONResponse(status_code=201, content=sale.admin_view())
+
+
+@router.put("/sales/{sale_id}")
+def edit_sale(sale_id: str, body: SaleIn) -> dict:
+    """Changes a line of the log. The answer is the line as it is now (its id changes only if its day did)."""
+    return sales_service.update_sale(sale_id, body, shop.now_local()).admin_view()
+
+
+@router.delete("/sales/{sale_id}")
+def remove_sale(sale_id: str) -> dict:
+    """Removes a line of the log (for a mistake)."""
+    sales_service.remove_sale(sale_id)
     return {"removed": True}

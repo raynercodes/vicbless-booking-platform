@@ -55,6 +55,25 @@ Resources:
         AttributeName: expiresAt
         Enabled: true
 
+  # Vic's sales log lives in its own table, apart from the bookings. Bookings are cleaned up after 90 days and are rebuilt
+  # often; the sales log is his permanent record, so it has no expiry and its own backups.
+  SalesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub vicbless-sales-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: !If [IsProd, true, false]
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      AttributeDefinitions:
+        - {AttributeName: pk, AttributeType: S}
+        - {AttributeName: sk, AttributeType: S}
+      KeySchema:
+        - {AttributeName: pk, KeyType: HASH}
+        - {AttributeName: sk, KeyType: RANGE}
+
   ApiLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Retain
@@ -89,6 +108,7 @@ Resources:
         Variables:
           ENVIRONMENT: !Ref Environment
           TABLE_NAME: !Ref Table
+          SALES_TABLE_NAME: !Ref SalesTable
           CORS_ALLOWED_ORIGINS: !Ref CorsAllowedOrigins
           EMAIL_PROVIDER: resend
           SMS_PROVIDER: textbelt
@@ -105,6 +125,7 @@ Resources:
               Resource:
                 - !GetAtt Table.Arn
                 - !Sub ${Table.Arn}/index/gsi1
+                - !GetAtt SalesTable.Arn
             - Effect: Allow
               Action: ssm:GetParameter
               Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/vicbless/${Environment}/*
@@ -143,5 +164,7 @@ Outputs:
     Value: !Sub ${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}
   TableName:
     Value: !Ref Table
+  SalesTableName:
+    Value: !Ref SalesTable
   FunctionName:
     Value: !Ref ApiFunction

@@ -14,7 +14,7 @@
 // agree. Sample ones are marked so they are never mistaken for real customers.
 
 import { getBusy } from '../lib/mockApi.js'
-import { fromKey, slotStarts } from '../lib/availability.js'
+import { fromKey, keyOf, slotStarts } from '../lib/availability.js'
 import { afterService, fromApi, isAfterStart, toApi } from '../lib/shopSettings.js'
 import {
   blockedStartsFor,
@@ -23,14 +23,17 @@ import {
   readBlocks,
   readBookings,
   readCancelledSamples,
+  readSales,
   readShopSettings,
   slotMinutesOn,
+  writeSales,
   writeBlocks,
   writeBookings,
   writeCancelledSamples,
   writeShopSettings,
 } from '../lib/mockStore.js'
 import { findConflicts } from './blocks.js'
+import { saleServices } from '../lib/sales.js'
 
 const SESSION_KEY = 'vicbless.admin.session'
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -261,4 +264,56 @@ export async function saveSettings(body) {
   const saved = toApi(parsed)
   writeShopSettings(saved)
   return saved
+}
+
+// The sales log. Kept in this browser, newest first, with the same rules as the real API.
+export async function getSales() {
+  await delay(150)
+  return readSales()
+}
+
+function buildSale(body, previous) {
+  const settings = readShopSettings()
+  const today = keyOf(new Date())
+  const service = body.serviceId ? saleServices(settings).find((s) => s.id === body.serviceId) : null
+  if (body.serviceId && !service) throw new Error('Pick a service, or type the name of a one-off service.')
+  const custom = body.priceMode === 'custom'
+  const dateKey = body.dateKey || today
+  const keepId = previous && previous.dateKey === dateKey
+  return {
+    id: keepId ? previous.id : `${dateKey}.sale.${Math.random().toString(16).slice(2, 10).padEnd(8, '0')}`,
+    dateKey,
+    serviceId: service ? service.id : '',
+    serviceName: service ? service.name : body.serviceName,
+    amountCents: custom ? body.amountCents : service.price * 100,
+    customPrice: custom,
+    payment: body.payment === 'online' ? 'online' : 'shop',
+    clientName: body.clientName,
+    note: body.note || '',
+    createdAt: previous ? previous.createdAt : new Date().toISOString(),
+  }
+}
+
+export async function addSale(body) {
+  await delay(200)
+  const row = buildSale(body)
+  writeSales([row, ...readSales()])
+  return row
+}
+
+// Changes one line. Same day: the line keeps its id. A different day: it gets a new id, like the real API.
+export async function updateSale(id, body) {
+  await delay(200)
+  const list = readSales()
+  const index = list.findIndex((s) => s.id === id)
+  if (index < 0) throw new Error('That sale is not in the log any more.')
+  const row = buildSale(body, list[index])
+  list[index] = row
+  writeSales(list)
+  return row
+}
+
+export async function removeSale(id) {
+  await delay(150)
+  writeSales(readSales().filter((s) => s.id !== id))
 }

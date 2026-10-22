@@ -41,3 +41,14 @@ def table_definition(table_name: str) -> dict:
         "KeySchema": props["KeySchema"],
         "GlobalSecondaryIndexes": props["GlobalSecondaryIndexes"],
     }
+
+
+def sales_table_definition(table_name: str) -> dict:
+    """The same, for the sales log's own table (the template's SalesTable resource)."""
+    props = load_template()["Resources"]["SalesTable"]["Properties"]
+    return {
+        "TableName": table_name,
+        "BillingMode": props["BillingMode"],
+        "AttributeDefinitions": props["AttributeDefinitions"],
+        "KeySchema": props["KeySchema"],
+    }

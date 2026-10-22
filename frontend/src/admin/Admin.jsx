@@ -4,6 +4,7 @@ import SiteMenu from '../components/SiteMenu.jsx'
 import { copyrightLine } from '../lib/format.js'
 import Greeting from './Greeting.jsx'
 import Schedule from './Schedule.jsx'
+import SalesPage from './SalesPage.jsx'
 import SettingsPanel from './SettingsPanel.jsx'
 import SignIn from './SignIn.jsx'
 import LoopingLogo from './LoopingLogo.jsx'
@@ -23,7 +24,7 @@ function readLastGreeting() {
 
 export default function Admin() {
   const [signedIn, setSignedIn] = useState(isSignedIn)
-  const [view, setView] = useState('schedule') // 'schedule' | 'settings' (Menu > Settings > Shop settings)
+  const [view, setView] = useState('schedule') // 'schedule' | 'sales' (the two tabs) | 'settings' (Menu > Settings > Shop settings)
 
   // One greeting per visit: the sign-in screen and the dashboard show the same one, and the next
   // visit gets a different one.
@@ -60,7 +61,7 @@ export default function Admin() {
   if (!signedIn) return <SignIn greeting={greeting} onSignedIn={() => setSignedIn(true)} />
 
   return (
-    <main className="admin">
+    <main className={view === 'sales' ? 'admin admin-wide' : 'admin'}>
       <header className="admin-bar">
         <SiteMenu
           settingsExtra={({ close }) => (
@@ -103,7 +104,20 @@ export default function Admin() {
         </p>
       )}
 
-      {view === 'settings' ? <SettingsPanel onClose={() => setView('schedule')} /> : <Schedule />}
+      {view !== 'settings' && (
+        <nav className="admin-tabs" aria-label="Dashboard pages">
+          {[
+            ['schedule', 'Schedule'],
+            ['sales', 'Sales log'],
+          ].map(([id, label]) => (
+            <button key={id} type="button" aria-current={view === id ? 'page' : undefined} onClick={() => setView(id)}>
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {view === 'settings' ? <SettingsPanel onClose={() => setView('schedule')} /> : view === 'sales' ? <SalesPage /> : <Schedule />}
 
       <footer className="admin-foot">{copyrightLine()}</footer>
     </main>

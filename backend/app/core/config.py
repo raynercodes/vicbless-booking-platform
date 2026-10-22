@@ -25,6 +25,7 @@ class Settings:
 
     environment: str
     table_name: str
+    sales_table_name: str  # Vic's sales log lives in its own table, apart from the bookings
     cors_origins: tuple[str, ...]
     email_provider: str
     sms_provider: str
@@ -40,6 +41,7 @@ def get_settings() -> Settings:
     return Settings(
         environment=os.environ.get("ENVIRONMENT", "dev"),
         table_name=os.environ.get("TABLE_NAME", "vicbless-dev"),
+        sales_table_name=os.environ.get("SALES_TABLE_NAME", "vicbless-sales-dev"),
         cors_origins=origins,
         email_provider=os.environ.get("EMAIL_PROVIDER", "resend").strip().lower(),
         sms_provider=os.environ.get("SMS_PROVIDER", "textbelt").strip().lower(),

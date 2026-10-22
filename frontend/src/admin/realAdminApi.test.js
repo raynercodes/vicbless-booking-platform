@@ -1,7 +1,7 @@
 // The real admin data layer against a pretend fetch: the token, the URLs, and what happens when it expires.
 // Runs in plain Node (no jsdom needed): a tiny in-memory localStorage and a window that can dispatch events stand in.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { addBlock, cancelBooking, getDay, isSignedIn, moveBooking, removeBlock, SIGNED_OUT_EVENT, signIn, signOut } from './realAdminApi.js'
+import { addBlock, addSale, cancelBooking, getDay, getSales, removeSale, updateSale, isSignedIn, moveBooking, removeBlock, SIGNED_OUT_EVENT, signIn, signOut } from './realAdminApi.js'
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const errorBody = (code, message) => ({ error: { code, message } })
@@ -133,5 +133,55 @@ describe('signed-in calls', () => {
     stub(json(200, {}))
     await expect(getDay('2026-10-13')).rejects.toMatchObject({ status: 401 })
     expect(calls).toHaveLength(0)
+  })
+})
+
+describe('the sales log', () => {
+  it('reads the whole log', async () => {
+    await signedIn()
+    stub(json(200, { sales: [{ id: '2026-10-22.sale.abcdef12' }] }))
+    expect(await getSales()).toEqual([{ id: '2026-10-22.sale.abcdef12' }])
+    expect(calls[0].url).toBe('/api/admin/sales')
+    expect(calls[0].init.headers.Authorization).toBe('Bearer tok123')
+  })
+
+  it('treats an odd answer as an empty log', async () => {
+    await signedIn()
+    stub(json(200, {}))
+    expect(await getSales()).toEqual([])
+  })
+
+  it('adds a sale and gives back the new line', async () => {
+    await signedIn()
+    stub(json(201, { id: '2026-10-22.sale.abcdef12', clientName: 'Marcus' }))
+    const body = { serviceId: 'mens-cut', priceMode: 'standard', payment: 'shop', clientName: 'Marcus' }
+    expect(await addSale(body)).toMatchObject({ clientName: 'Marcus' })
+    expect(calls[0].url).toBe('/api/admin/sales')
+    expect(calls[0].init.method).toBe('POST')
+    expect(JSON.parse(calls[0].init.body)).toEqual(body)
+  })
+
+  it('shows the API\'s own words when it refuses a sale', async () => {
+    await signedIn()
+    stub(json(422, errorBody('validation_error', "Enter the client's name, up to 60 characters.")))
+    await expect(addSale({})).rejects.toMatchObject({ message: "Enter the client's name, up to 60 characters." })
+  })
+
+  it('changes a sale with a PUT to its id', async () => {
+    await signedIn()
+    stub(json(200, { id: '2026-10-21.sale.11111111', clientName: 'Marcus' }))
+    const body = { serviceId: 'mens-cut', priceMode: 'custom', amountCents: 6000, payment: 'online', clientName: 'Marcus', dateKey: '2026-10-21' }
+    expect(await updateSale('2026-10-22.sale.abcdef12', body)).toMatchObject({ id: '2026-10-21.sale.11111111' })
+    expect(calls[0].url).toBe('/api/admin/sales/2026-10-22.sale.abcdef12')
+    expect(calls[0].init.method).toBe('PUT')
+    expect(JSON.parse(calls[0].init.body)).toEqual(body)
+  })
+
+  it('removes a sale by its id', async () => {
+    await signedIn()
+    stub(json(200, { removed: true }))
+    await removeSale('2026-10-22.sale.abcdef12')
+    expect(calls[0].url).toBe('/api/admin/sales/2026-10-22.sale.abcdef12')
+    expect(calls[0].init.method).toBe('DELETE')
   })
 })

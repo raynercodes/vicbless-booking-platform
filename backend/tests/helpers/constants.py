@@ -9,6 +9,7 @@ from app.domain import shop
 NOW = datetime(2026, 10, 12, 10, 0, tzinfo=shop.TIMEZONE)
 
 TEST_TABLE = "vicbless-test"
+TEST_SALES_TABLE = "vicbless-sales-test"
 ENVIRONMENT = "dev"
 
 # Dates relative to NOW that the tests use a lot.

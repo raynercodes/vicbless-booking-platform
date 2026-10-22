@@ -435,8 +435,10 @@ export default function Book() {
             <div>
               <dt>Service</dt>
               <dd>
-                {service.name} ({slotFor(shop, fromKey(dateKey))} min), {priceLabel(service)}
-                {isAfter && <span className="after-badge">After hours</span>}
+                <span>
+                  {service.name} ({slotFor(shop, fromKey(dateKey))} min), {priceLabel(service)}
+                </span>
+                {isAfter && <span className="after-badge after-badge-below">After hours</span>}
               </dd>
             </div>
             <div>

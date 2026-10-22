@@ -21,3 +21,8 @@ def put_param(name: str, value: str, *, secure: bool = True) -> None:
 def raw_table():
     """The table object, for tests that need to look at exactly what was stored."""
     return boto3.resource("dynamodb").Table("vicbless-test")
+
+
+def raw_sales_table():
+    """The sales log's own table, for tests that need to look at exactly what was stored."""
+    return boto3.resource("dynamodb").Table("vicbless-sales-test")

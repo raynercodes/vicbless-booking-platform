@@ -49,6 +49,20 @@ def test_table(t):
     assert "IsProd" in str(p["PointInTimeRecoverySpecification"]) and "IsProd" in str(p["DeletionProtectionEnabled"])
 
 
+def test_the_sales_log_has_its_own_table(t):
+    res = t["Resources"]
+    sales = res["SalesTable"]
+    p = sales["Properties"]
+    assert sales["DeletionPolicy"] == "Retain" and p["BillingMode"] == "PAY_PER_REQUEST"
+    assert "vicbless-sales-" in str(p["TableName"]) and "TimeToLiveSpecification" not in p  # permanent, never expires
+    assert "IsProd" in str(p["PointInTimeRecoverySpecification"]) and "IsProd" in str(p["DeletionProtectionEnabled"])
+    assert [k["AttributeName"] for k in p["KeySchema"]] == ["pk", "sk"] and "GlobalSecondaryIndexes" not in p
+    fn = res["ApiFunction"]["Properties"]
+    assert fn["Environment"]["Variables"]["SALES_TABLE_NAME"] == {"Ref": "SalesTable"}
+    assert any("SalesTable.Arn" in str(r) for r in fn["Policies"][0]["Statement"][0]["Resource"])
+    assert "SalesTableName" in t["Outputs"]
+
+
 def test_environments_and_params(t):
     assert t["Parameters"]["Environment"]["AllowedValues"] == ["dev", "prod"]
     assert set(t["Parameters"]) == {"Environment", "CorsAllowedOrigins"}  # the deploy workflow passes exactly these

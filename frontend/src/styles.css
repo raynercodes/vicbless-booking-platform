@@ -1161,6 +1161,13 @@ html[data-motion='off'] .switch-track::after {
   white-space: nowrap;
 }
 
+/* Under a line of text (the booking summary, a dashboard card), on its own line with room above it. */
+.after-badge-below {
+  display: block;
+  width: fit-content;
+  margin-top: 8px;
+}
+
 .opt-after {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent), 0 0 18px -6px var(--accent);

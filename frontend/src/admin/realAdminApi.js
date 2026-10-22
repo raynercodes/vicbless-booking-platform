@@ -6,6 +6,10 @@
 //   moveBooking(item, to)     PATCH  /api/admin/bookings/{id}    (the booking comes back with a NEW id)
 //   addBlock(block)           POST   /api/admin/blocks
 //   removeBlock(id)           DELETE /api/admin/blocks/{id}
+//   getSales()                GET    /api/admin/sales            -> the whole sales log, newest first
+//   addSale(body)             POST   /api/admin/sales            -> the new line
+//   updateSale(id, body)      PUT    /api/admin/sales/{id}       -> the changed line (its id changes if the day changed)
+//   removeSale(id)            DELETE /api/admin/sales/{id}
 //   getAdminSettings()        GET    /api/admin/settings
 //   saveSettings(body)        PUT    /api/admin/settings       (the saved settings come back)
 //
@@ -112,4 +116,21 @@ export function getAdminSettings() {
 
 export function saveSettings(body) {
   return call('PUT', '/admin/settings', body)
+}
+
+export async function getSales() {
+  const answer = await call('GET', '/admin/sales')
+  return Array.isArray(answer && answer.sales) ? answer.sales : []
+}
+
+export function addSale(body) {
+  return call('POST', '/admin/sales', body)
+}
+
+export function updateSale(id, body) {
+  return call('PUT', `/admin/sales/${encodeURIComponent(id)}`, body)
+}
+
+export async function removeSale(id) {
+  await call('DELETE', `/admin/sales/${encodeURIComponent(id)}`)
 }

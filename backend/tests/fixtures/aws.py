@@ -5,8 +5,8 @@ import pytest
 from moto import mock_aws
 
 from app.core import config
-from tests.helpers.constants import ENVIRONMENT, TEST_TABLE
-from tests.helpers.template import table_definition
+from tests.helpers.constants import ENVIRONMENT, TEST_SALES_TABLE, TEST_TABLE
+from tests.helpers.template import sales_table_definition, table_definition
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +22,7 @@ def aws(monkeypatch):
         "AWS_DEFAULT_REGION": "us-east-1",
         "ENVIRONMENT": ENVIRONMENT,
         "TABLE_NAME": TEST_TABLE,
+        "SALES_TABLE_NAME": TEST_SALES_TABLE,
         "EMAIL_PROVIDER": "resend",
     }.items():
         monkeypatch.setenv(key, value)
@@ -29,6 +30,7 @@ def aws(monkeypatch):
     config.reset_caches()
     with mock_aws():
         boto3.client("dynamodb").create_table(**table_definition(TEST_TABLE))
+        boto3.client("dynamodb").create_table(**sales_table_definition(TEST_SALES_TABLE))
         yield
     config.reset_caches()
 

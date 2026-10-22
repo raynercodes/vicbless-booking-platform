@@ -103,6 +103,17 @@ Reminders: the same Lambda runs `services/reminders.py` every 15 minutes (EventB
 Vic chooses the times (24 and 2 hours before to start with) in Shop settings. Each one is marked on the booking as sent first,
 so it goes out once.
 
+## Sales log
+
+Vic keeps a hand-made log of the clients he serves (Sales log tab of his dashboard): which service, the listed price or a custom one, whether they paid online or at the shop, the client's name, an optional note and the day (today unless he changes it). It is separate from online bookings and does not change the schedule.
+
+- `GET /api/admin/sales` lists the whole log, newest first. `POST /api/admin/sales` adds a line. `PUT /api/admin/sales/{id}` changes one (the Edit button; the body is the same as for adding). `DELETE /api/admin/sales/{id}` removes one (for a mistake). All need Vic's sign-in.
+- A listed price is read from his settings on the server (After Hours Cuts included), never trusted from the screen. A one-off service (typed name) needs a typed price. A sale can't be dated in the future or more than a year back.
+- **Its own table.** Sales live in `vicbless-sales-<env>` (`SalesTable` in `infra/template.yaml`, env `SALES_TABLE_NAME`), not in the bookings table. Partition `SALES#vic`, sort key `<day>#<id>`, no expiry, so the log is a permanent record (bookings disappear after 90 days). The table is retained when the stack is deleted, and in prod it has deletion protection and point-in-time recovery.
+- Editing a sale on the same day rewrites the line under the same id. Moving it to another day changes its sort key, so the old line is deleted and a new one written in one transaction, and the answer carries the new id. A line that no longer exists answers 404.
+- **Moving old sales.** If sales were logged before the new table existed they are still in the bookings table as `SALE#...` items. After deploying, run `python scripts/migrate_sales_table.py --env dev` (or `prod`) to see what would move, then add `--apply` to move them. It is safe to run twice.
+- Search, filters, sorting, the numbers, the line graph and the Excel download all happen in the dashboard from the list this returns.
+
 ## After Hours Cuts
 
 Late appointments after the shop closes, sold as one service (`after-hours`, "After Hours Cuts", $70 to start). It is separate from the services Vic lists: it can only be booked at the after-hours times, and those times can only be booked with it (the API refuses any other pairing, for customers and when Vic moves a booking).
