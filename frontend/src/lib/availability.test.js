@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { slotsForDay, slotStarts, startsForDay, blocksFor, fmtTime, keyOf, fromKey } from './availability.js'
+import { slotsForDay, slotStarts, startsForDay, blocksFor, fmtTime, keyOf, fromKey, shopNow } from './availability.js'
 
 const at = (h, m = 0) => h * 60 + m
 const HOURS = {
@@ -136,5 +136,27 @@ describe('startsForDay (the whole day, free or not)', () => {
     const open = run(TUESDAY, 35)
     const every = all(TUESDAY, 35)
     for (const s of open) expect(every).toContain(s)
+  })
+})
+
+describe('the shop clock (Eastern time)', () => {
+  it('reads Eastern wall time whatever the customer\'s timezone is', () => {
+    const summer = shopNow(new Date('2026-10-22T18:00:00Z')) // EDT, UTC-4
+    expect([keyOf(summer), summer.getHours(), summer.getMinutes()]).toEqual(['2026-10-22', 14, 0])
+    const winter = shopNow(new Date('2026-12-01T18:00:00Z')) // EST, UTC-5
+    expect([keyOf(winter), winter.getHours()]).toEqual(['2026-12-01', 13])
+  })
+
+  it('uses the Eastern date, even when it is already tomorrow in UTC', () => {
+    const late = shopNow(new Date('2026-10-23T02:30:00Z'))
+    expect([keyOf(late), late.getHours(), late.getMinutes()]).toEqual(['2026-10-22', 22, 30])
+  })
+
+  it('hides 11 am on a day it is already 2 pm in Eastern time', () => {
+    const thursday = new Date(2026, 9, 22)
+    const now = shopNow(new Date('2026-10-22T18:00:00Z'))
+    const slots = slotsForDay({ date: thursday, minutes: 35, hours: HOURS, now, slotMinutes: SLOT })
+    expect(slots[0]).toBeGreaterThan(at(14, 30)) // more than 30 minutes from 2 pm
+    expect(slots).not.toContain(at(11))
   })
 })

@@ -4,6 +4,20 @@ export const pad = (n) => String(n).padStart(2, '0')
 
 export const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
+export const SHOP_TIMEZONE = 'America/New_York'
+
+// The shop's clock. Vic is in Eastern time, so "today" and "the time passed" mean Eastern time wherever the customer is.
+// Returns a Date whose local fields (getHours, getDate ...) read the Eastern wall clock, so the rest of the code can
+// keep using keyOf() and getHours() on it.
+export function shopNow(at = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: SHOP_TIMEZONE, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+      .formatToParts(at)
+      .map((p) => [p.type, Number(p.value)]),
+  )
+  return new Date(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+}
+
 export const fromKey = (k) => {
   const [y, m, d] = k.split('-').map(Number)
   return new Date(y, m - 1, d)
@@ -33,8 +47,8 @@ export function slotStarts(date, hours, slotMinutes) {
 // Start times (minutes after midnight) a service of `minutes` can begin on `date`.
 //   hours   map of dayIndex -> [[open, close], ...] | null   (minutes after midnight)
 //   busy    array of busy block starts
-//   now     current time, used to hide times that already passed
-export function slotsForDay({ date, minutes, hours, busy = [], now = new Date(), slotMinutes = 35 }) {
+//   now     the shop's current time (see shopNow), used to hide times that already passed
+export function slotsForDay({ date, minutes, hours, busy = [], now = shopNow(), slotMinutes = 35 }) {
   const windows = hours[date.getDay()]
   if (!windows) return []
 

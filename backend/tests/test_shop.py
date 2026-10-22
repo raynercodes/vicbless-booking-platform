@@ -169,3 +169,10 @@ def test_busy_slots_are_the_grid_slots_that_overlap_something_taken():
     assert shop.busy_slots(TUE, 35, taken) == [at(12, 35)]
     assert shop.busy_slots(TUE, 45, set()) == []
     assert shop.busy_slots(WED, 45, taken) == []  # a closed day has no grid
+
+
+def test_a_time_that_passed_in_eastern_time_is_refused_even_when_the_clock_is_in_utc():
+    utc_now = datetime(2026, 10, 12, 18, 0, tzinfo=__import__("datetime").timezone.utc)  # 2:00 pm in New York
+    with pytest.raises(SlotUnavailable):
+        shop.check_bookable(date(2026, 10, 12), at(12), 35, utc_now)
+    shop.check_bookable(date(2026, 10, 12), at(14, 55), 35, utc_now)

@@ -267,18 +267,18 @@ export default function SalesPage() {
           {errors.client && <p className="err">{errors.client}</p>}
         </div>
 
-        <div className="sales-two">
-          <div className="field">
-            <label htmlFor={`${uid}-date`}>Day</label>
-            <input id={`${uid}-date`} type="date" max={today} value={form.dateKey} onChange={(e) => edit({ dateKey: e.target.value })} aria-invalid={!!errors.date} />
-            {errors.date && <p className="err">{errors.date}</p>}
-          </div>
-          <div className="field">
-            <label htmlFor={`${uid}-note`}>
-              Note <span className="hint">(optional)</span>
-            </label>
-            <input id={`${uid}-note`} maxLength={NOTE_MAX} value={form.note} onChange={(e) => edit({ note: e.target.value })} />
-          </div>
+        <div className="field sales-day">
+          <label htmlFor={`${uid}-date`}>Day</label>
+          <input id={`${uid}-date`} type="date" max={today} value={form.dateKey} onChange={(e) => edit({ dateKey: e.target.value })} aria-invalid={!!errors.date} />
+          {errors.date && <p className="err">{errors.date}</p>}
+        </div>
+
+        <div className="field sales-notebox">
+          <label htmlFor={`${uid}-note`}>
+            Note <span className="hint">(optional)</span>
+          </label>
+          <textarea id={`${uid}-note`} rows={3} maxLength={NOTE_MAX} placeholder="Anything worth remembering about this cut" value={form.note} onChange={(e) => edit({ note: e.target.value })} />
+          {errors.note && <p className="err">{errors.note}</p>}
         </div>
 
         {failure && (
@@ -338,7 +338,7 @@ export default function SalesPage() {
           <div className="sales-filters" role="search" aria-label="Search and filter the sales log">
             <input type="search" className="sales-search" aria-label="Search clients" placeholder="Search a client, service or note" value={query} onChange={(e) => setQuery(e.target.value)} />
             <div className="sales-filter-row">
-              <select aria-label="Filter by service" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
+              <select className="sales-wide" aria-label="Filter by service" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
                 <option value="all">All services</option>
                 {serviceNames.map((n) => (
                   <option key={n} value={n}>
@@ -358,7 +358,7 @@ export default function SalesPage() {
                   </option>
                 ))}
               </select>
-              <select aria-label="Sort the list" value={sortId} onChange={(e) => setSortId(e.target.value)}>
+              <select className="sales-wide" aria-label="Sort the list" value={sortId} onChange={(e) => setSortId(e.target.value)}>
                 {SORTS.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}

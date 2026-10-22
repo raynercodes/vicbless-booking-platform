@@ -1976,3 +1976,88 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- touch-friendly sales log ---- */
+
+.sales-add select,
+.sales-filters select {
+  min-height: 52px;
+  padding: 12px 40px 12px 14px;
+  font-size: 16px; /* 16px or more stops phones zooming in when a box is tapped */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1.5l6 6 6-6' fill='none' stroke='%23a78bfa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+}
+
+.sales-search,
+.sales-other,
+.sales-add .field input,
+.sales-add .field textarea {
+  min-height: 52px;
+  font-size: 16px;
+}
+
+.sales-add .field input[type='date'] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.sales-add .field textarea {
+  display: block;
+  width: 100%;
+  min-height: 104px;
+  padding: 12px 14px;
+  line-height: 1.4;
+  resize: vertical;
+  font-family: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+
+.sales-add .field textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.sales-day,
+.sales-notebox {
+  margin-bottom: 14px;
+}
+
+.sales-pill {
+  min-height: 52px;
+  font-size: 1rem;
+}
+
+.sales-filter-row .sales-wide {
+  grid-column: 1 / -1;
+}
+
+.sales-submit-row .btn {
+  min-height: 52px;
+}
+
+.sales-actions .admin-box-btn {
+  min-height: 44px;
+  min-width: 64px;
+  padding: 8px 14px;
+}
+
+@media (min-width: 720px) {
+  .sales-filter-row .sales-wide {
+    grid-column: auto;
+  }
+
+  .sales-add select,
+  .sales-filters select {
+    min-height: 46px;
+    font-size: 1rem;
+  }
+}

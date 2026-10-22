@@ -3,7 +3,7 @@ import EmailLink from '../components/EmailLink.jsx'
 import LogoCheckerboard from '../components/LogoCheckerboard.jsx'
 import Reveal from '../components/Reveal.jsx'
 import { DAYS_AHEAD, LIMITS, SMS_CONSENT, STAFF, SUCCESS_HEADLINE } from '../config.js'
-import { fmtTime, fromKey, keyOf, slotsForDay, startsForDay } from '../lib/availability.js'
+import { fmtTime, fromKey, keyOf, shopNow, slotsForDay, startsForDay } from '../lib/availability.js'
 import { createBooking, getAvailability, SlotTakenError } from '../lib/api.js'
 import { countLabel, nearLimit, priceLabel, serviceIdFromHash } from '../lib/format.js'
 import { clearPending, loadPending, readReturn, savePending, tabStorage } from '../lib/paymentReturn.js'
@@ -24,7 +24,7 @@ const payLine = (s, paidOnline = false) => {
 }
 
 function buildDays() {
-  const start = new Date()
+  const start = shopNow()
   start.setHours(0, 0, 0, 0)
   return Array.from({ length: DAYS_AHEAD }, (_, i) => {
     const d = new Date(start)
@@ -34,7 +34,7 @@ function buildDays() {
 }
 
 function dayLabel(d) {
-  const today = new Date()
+  const today = shopNow()
   today.setHours(0, 0, 0, 0)
   const diff = Math.round((d - today) / 86400000)
   const monthDay = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
@@ -125,7 +125,7 @@ export default function Book() {
 
   const slotsByDay = useMemo(() => {
     if (!busy || !service) return {}
-    const now = new Date()
+    const now = shopNow()
     const out = {}
     for (const d of days) {
       const k = keyOf(d)
