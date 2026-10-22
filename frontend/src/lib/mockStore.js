@@ -2,9 +2,8 @@
 // It exists so that cancelling or blocking time in the dashboard changes what customers see.
 // It goes away when the real backend exists.
 
-import { HOURS } from '../config.js'
 import { fromKey, slotStarts } from './availability.js'
-import { DEFAULT_SHOP_SETTINGS, fromApi, slotFor } from './shopSettings.js'
+import { DEFAULT_SHOP_SETTINGS, fromApi, hoursFor, slotFor } from './shopSettings.js'
 
 const KEYS = {
   bookings: 'vicbless.bookings', // bookings made through the site
@@ -58,6 +57,9 @@ export function writeShopSettings(body) {
 // How long an appointment is on `dateKey` right now.
 export const slotMinutesOn = (dateKey) => slotFor(readShopSettings(), fromKey(dateKey))
 
+// The opening windows right now, late appointments included (they depend on the saved settings).
+export const hoursNow = () => hoursFor(readShopSettings())
+
 // True when the times [aStart, aEnd) and [bStart, bEnd) share any minute.
 export const overlaps = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd
 
@@ -67,7 +69,7 @@ export function blockedStartsFor(dateKey) {
   const out = new Set()
   if (blocks.length === 0) return out
   const slot = slotMinutesOn(dateKey)
-  for (const s of slotStarts(fromKey(dateKey), HOURS, slot)) {
+  for (const s of slotStarts(fromKey(dateKey), hoursNow(), slot)) {
     if (blocks.some((b) => overlaps(s, s + slot, b.start, b.end))) out.add(s)
   }
   return out

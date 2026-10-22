@@ -32,6 +32,15 @@ LEAD_MINUTES = 30  # a time today must start more than this many minutes from no
 MAX_BLOCK_DAYS_AHEAD = 365  # how far ahead Vic can block off time
 MAX_RANGE_DAYS = 31  # the longest availability range one request may ask for
 MAX_SERVICES = 12  # how many services Vic can list
+MAX_AFTER_SLOTS = 6  # the most after-hours appointments Vic can add to one day
+DAY_END = 24 * 60  # an after-hours window never runs past midnight
+
+# After Hours Cuts: late appointments after the shop closes, one service that covers everything. It is separate from
+# the services Vic lists: it can only be booked at the after-hours times, and those times can only be booked with it.
+AFTER_HOURS_ID = "after-hours"
+AFTER_HOURS_NAME = "After Hours Cuts"
+AFTER_HOURS_PRICE = 70
+AFTER_HOURS_NOTE = "Late appointments after the shop closes. Any cut, design, beard or eyebrow work, all in one price."
 
 
 def at(hour: int, minute: int = 0) -> int:
@@ -66,6 +75,20 @@ class Service:
     price: int
     from_price: bool = False
     note: str = ""
+    after_hours: bool = False  # True only for After Hours Cuts
+
+
+@dataclass(frozen=True)
+class AfterHours:
+    """The after-hours offer Vic controls: its price, its description, and how many late appointments each day has.
+
+    The late appointments start the moment the shop closes and run back to back, each as long as that day's
+    appointment length. `slots` counts them per weekday, Monday ... Sunday. A closed day never has any.
+    """
+
+    price: int = AFTER_HOURS_PRICE
+    note: str = AFTER_HOURS_NOTE
+    slots: tuple[int, int, int, int, int, int, int] = (0, 0, 0, 2, 2, 0, 0)  # Thursday and Friday: 2 each
 
 
 @dataclass(frozen=True)
@@ -76,12 +99,24 @@ class ShopSettings:
     services: tuple[Service, ...]  # in the order they are shown
     # How many hours before an appointment a reminder goes out (each one is a separate reminder). Empty = no reminders.
     reminder_hours: tuple[int, ...] = (24, 2)
+    after_hours: AfterHours = AfterHours()
+
+    def after_count(self, day: date) -> int:
+        """How many after-hours appointments this date has (0 on a closed day)."""
+        return self.after_hours.slots[day.weekday()] if is_open(day) else 0
+
+    def after_service(self) -> Service:
+        """After Hours Cuts as a service (it is not part of `services`, which is the list Vic edits)."""
+        a = self.after_hours
+        return Service(AFTER_HOURS_ID, AFTER_HOURS_NAME, a.price, False, a.note, True)
 
     def slot_for(self, day: date) -> int:
         """How long an appointment is on this date."""
         return self.slot_minutes[day.weekday()]
 
     def service(self, service_id: str) -> Service | None:
+        if service_id == AFTER_HOURS_ID:
+            return self.after_service()
         for s in self.services:
             if s.id == service_id:
                 return s
@@ -163,13 +198,38 @@ def is_open(day: date) -> bool:
     return bool(windows_for(day))
 
 
-def grid_starts(day: date, slot: int) -> list[int]:
+def all_windows(day: date, slot: int = 0, after: int = 0) -> list[tuple[int, int]]:
+    """The opening windows plus, when `after` > 0, one more that starts at closing and holds `after` appointments of `slot`."""
+    windows = list(windows_for(day))
+    if windows and after > 0:
+        closing = windows[-1][1]
+        windows.append((closing, min(closing + after * slot, DAY_END)))
+    return windows
+
+
+def is_after_hours(day: date, start: int) -> bool:
+    """Is this start at or after the day's closing time (so it is an after-hours appointment)?"""
+    windows = windows_for(day)
+    return bool(windows) and start >= windows[-1][1]
+
+
+def check_service_fits_slot(after_service: bool, day: date, start: int) -> None:
+    """After Hours Cuts goes only in the after-hours times, and those times take only After Hours Cuts. Raises InvalidSlot."""
+    late = is_after_hours(day, start)
+    if after_service and not late:
+        raise InvalidSlot(f"{AFTER_HOURS_NAME} is only booked at the after-hours times. Pick one of those.")
+    if late and not after_service:
+        raise InvalidSlot(f"That late time is for {AFTER_HOURS_NAME}. Pick that service, or a time during regular hours.")
+
+
+def grid_starts(day: date, slot: int, after: int = 0) -> list[int]:
     """Every appointment start of the day, across all opening windows (Saturday's break is not in it).
 
     Each window runs its own grid from its opening time, and an appointment must end by closing.
+    `after` is how many after-hours appointments the day has; they follow the last window.
     """
     out: list[int] = []
-    for open_, close in windows_for(day):
+    for open_, close in all_windows(day, slot, after):
         s = open_
         while s + slot <= close:
             out.append(s)
@@ -188,18 +248,18 @@ def booking_window(now: datetime) -> tuple[date, date]:
     return first, first + timedelta(days=DAYS_AHEAD - 1)
 
 
-def fits(day: date, start: int, slot: int) -> bool:
+def fits(day: date, start: int, slot: int, after: int = 0) -> bool:
     """True if an appointment starting at `start` is on that day's grid and finishes inside one opening window."""
-    for open_, close in windows_for(day):
+    for open_, close in all_windows(day, slot, after):
         if open_ <= start and start + slot <= close and (start - open_) % slot == 0:
             return True
     return False
 
 
-def check_bookable(day: date, start: int, slot: int, now: datetime) -> None:
+def check_bookable(day: date, start: int, slot: int, now: datetime, after: int = 0) -> None:
     """Raise InvalidSlot (can never work) or SlotUnavailable (not right now). Returns None if OK."""
     # 1. Structure: is this a real slot of a real opening day? If not, no amount of waiting will fix it.
-    if not fits(day, start, slot):
+    if not fits(day, start, slot, after):
         raise InvalidSlot()
     # 2. Timing: a real time can still be too early, too late, or too far away.
     first, last = booking_window(now)
@@ -210,13 +270,13 @@ def check_bookable(day: date, start: int, slot: int, now: datetime) -> None:
         raise SlotUnavailable()
 
 
-def check_movable(day: date, start: int, slot: int, now: datetime) -> None:
+def check_movable(day: date, start: int, slot: int, now: datetime, after: int = 0) -> None:
     """Rules for Vic moving a booking. Looser than for customers: no 14 day limit and no 30 minute notice.
 
     It still has to be a real slot of an open day, it can't be in the past, and it can't be more than a year out.
     Raises InvalidSlot. (Whether the time is free is decided by the database, not here.)
     """
-    if not fits(day, start, slot):
+    if not fits(day, start, slot, after):
         raise InvalidSlot()
     first = today(now)
     if day < first or day > first + timedelta(days=MAX_BLOCK_DAYS_AHEAD):
@@ -225,7 +285,7 @@ def check_movable(day: date, start: int, slot: int, now: datetime) -> None:
         raise InvalidSlot("That time has already passed today. Pick a later one.")
 
 
-def block_units(day: date, start: int, end: int) -> list[int]:
+def block_units(day: date, start: int, end: int, slot: int = 0, after: int = 0) -> list[int]:
     """The 5 minute units a block-off covers: everything from `start` up to `end` that lies inside opening hours.
 
     The range is widened to whole units. Saturday's lunch gap is never included, so a whole-day block does not claim it.
@@ -233,14 +293,14 @@ def block_units(day: date, start: int, end: int) -> list[int]:
     first = start - start % UNIT_MINUTES
     last = end + (-end) % UNIT_MINUTES
     out: list[int] = []
-    for open_, close in windows_for(day):
+    for open_, close in all_windows(day, slot, after):
         out.extend(u for u in range(max(first, open_), min(last, close), UNIT_MINUTES))
     return out
 
 
-def busy_slots(day: date, slot: int, taken_units: set[int]) -> list[int]:
+def busy_slots(day: date, slot: int, taken_units: set[int], after: int = 0) -> list[int]:
     """The appointment starts of the day's grid that overlap anything taken (a booking or blocked time)."""
-    return [s for s in grid_starts(day, slot) if any(u in taken_units for u in range(s, s + slot, UNIT_MINUTES))]
+    return [s for s in grid_starts(day, slot, after) if any(u in taken_units for u in range(s, s + slot, UNIT_MINUTES))]
 
 
 def check_blockable(day: date, now: datetime) -> None:

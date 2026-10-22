@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import EmailLink from '../components/EmailLink.jsx'
 import LogoCheckerboard from '../components/LogoCheckerboard.jsx'
 import Reveal from '../components/Reveal.jsx'
-import { DAYS_AHEAD, HOURS, LIMITS, SMS_CONSENT, STAFF, SUCCESS_HEADLINE } from '../config.js'
+import { DAYS_AHEAD, LIMITS, SMS_CONSENT, STAFF, SUCCESS_HEADLINE } from '../config.js'
 import { fmtTime, fromKey, keyOf, slotsForDay, startsForDay } from '../lib/availability.js'
 import { createBooking, getAvailability, SlotTakenError } from '../lib/api.js'
 import { countLabel, nearLimit, priceLabel, serviceIdFromHash } from '../lib/format.js'
 import { clearPending, loadPending, readReturn, savePending, tabStorage } from '../lib/paymentReturn.js'
-import { slotFor } from '../lib/shopSettings.js'
+import { AFTER_HOURS_ID, afterCount, afterDays, bookableServices, hoursFor, isAfterStart, slotFor } from '../lib/shopSettings.js'
 import { useShopSettings } from '../lib/useShopSettings.js'
 
 const STEPS = ['Service', 'Time', 'Details']
@@ -48,7 +48,8 @@ export default function Book() {
   const staff = STAFF[0]
   // Vic's services and how long an appointment is on each weekday (he edits both in his dashboard).
   const shop = useShopSettings()
-  const SERVICES = shop.services
+  const SERVICES = bookableServices(shop) // Vic's services, then After Hours Cuts
+  const hours = useMemo(() => hoursFor(shop), [shop]) // opening hours with the late appointments added
 
   // For each day: the taken times, and whether the whole day is off.
   const [availability, setAvailability] = useState(null)
@@ -65,7 +66,7 @@ export default function Book() {
   })
   const resumed = back && back.kind === 'cancelled' ? back.pending : null
   // A service link on the home page (#/book?service=mens-design) arrives with the service chosen.
-  const [preselected] = useState(() => (resumed ? resumed.request.serviceId : serviceIdFromHash(window.location.hash, shop.services)))
+  const [preselected] = useState(() => (resumed ? resumed.request.serviceId : serviceIdFromHash(window.location.hash, SERVICES)))
   const [step, setStep] = useState(resumed ? 2 : preselected ? 1 : 0)
   const [serviceId, setServiceId] = useState(preselected)
   const [dateKey, setDateKey] = useState(resumed ? resumed.request.dateKey : null)
@@ -88,6 +89,8 @@ export default function Book() {
   const ownHold = resumed ? { dateKey: resumed.request.dateKey, time: resumed.request.time } : null
 
   const service = SERVICES.find((s) => s.id === serviceId) || null
+  const isAfter = !!service && service.afterHours === true // After Hours Cuts books only the late times, the others only regular ones
+  const kindOf = (d, start) => isAfterStart(d, start) === isAfter
 
   const loadBusy = () =>
     getAvailability(days.map(keyOf))
@@ -129,14 +132,14 @@ export default function Book() {
       out[k] = slotsForDay({
         date: d,
         minutes: slotFor(shop, d),
-        hours: HOURS,
+        hours,
         busy: busy[k] || [],
         now,
         slotMinutes: slotFor(shop, d),
-      })
+      }).filter((start) => isAfterStart(d, start) === isAfter)
     }
     return out
-  }, [busy, service, days, shop])
+  }, [busy, service, days, shop, hours, isAfter])
 
   // Preselect the first day that has openings when the time step opens.
   useEffect(() => {
@@ -160,8 +163,12 @@ export default function Book() {
   const canPayOnline = shop.payOnline === true && !!service && service.price > 0
   const wantsOnline = canPayOnline && form.pay === 'online'
 
-  function chooseService(id) {
-    if (id !== serviceId) setTime(null)
+  function chooseService(id, keepDay = false) {
+    if (id !== serviceId) {
+      setTime(null)
+      // late times are on different days than regular ones, so the first day with openings is picked again
+      if (!keepDay && (id === AFTER_HOURS_ID) !== (serviceId === AFTER_HOURS_ID)) setDateKey(null)
+    }
     setServiceId(id)
     setStep(1)
   }
@@ -267,8 +274,11 @@ export default function Book() {
   const openTimes = new Set(daySlots)
   const dayStarts =
     selectedDay && service
-      ? startsForDay({ date: selectedDay, minutes: slotFor(shop, selectedDay), hours: HOURS, slotMinutes: slotFor(shop, selectedDay) })
+      ? startsForDay({ date: selectedDay, minutes: slotFor(shop, selectedDay), hours, slotMinutes: slotFor(shop, selectedDay) }).filter((m) => kindOf(selectedDay, m))
       : []
+  const lateService = SERVICES.find((s) => s.afterHours) || null
+  // On a day that has late times, someone looking at the regular times is told, with a way to see them.
+  const lateHint = !isAfter && lateService && selectedDay && afterCount(shop, selectedDay) > 0
 
   return (
     <main className="book">
@@ -310,14 +320,16 @@ export default function Book() {
             <button
               key={s.id}
               type="button"
-              className="opt"
+              className={s.afterHours ? 'opt opt-after' : 'opt'}
               aria-pressed={serviceId === s.id}
               onClick={() => chooseService(s.id)}
             >
               <span className="name">{s.name}</span>
+              {s.afterHours && <span className="after-badge">After hours</span>}
               <span className="leader" />
               <span className="price">{priceLabel(s)}</span>
               {s.note && <span className="note">{s.note}</span>}
+              {s.afterHours && <span className="note">After closing on {afterDays(shop).join(' and ')}.</span>}
             </button>
           ))}
         </section>
@@ -332,8 +344,9 @@ export default function Book() {
               <div className="days" role="group" aria-label="Days">
                 {days.map((d) => {
                   const k = keyOf(d)
-                  const closed = !HOURS[d.getDay()] || !!availability[k]?.dayOff // shop closed that weekday, or Vic took the day off
+                  const closed = !hours[d.getDay()] || !!availability[k]?.dayOff // shop closed that weekday, or Vic took the day off
                   const free = (slotsByDay[k] || []).length
+                  const none = isAfter && !closed && afterCount(shop, d) === 0 // no late times that weekday
                   return (
                     <button
                       key={k}
@@ -348,7 +361,7 @@ export default function Book() {
                     >
                       <span className="dow">{d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
                       <span className="dom">{d.getDate()}</span>
-                      <span className="tag">{closed ? 'Closed' : free ? '' : 'Full'}</span>
+                      <span className="tag">{closed ? 'Closed' : none ? 'None' : free ? '' : 'Full'}</span>
                     </button>
                   )
                 })}
@@ -363,7 +376,7 @@ export default function Book() {
                         <button
                           key={m}
                           type="button"
-                          className="time"
+                          className={isAfter ? 'time time-after' : 'time'}
                           aria-pressed={time === m}
                           disabled={!open}
                           onClick={() => {
@@ -372,13 +385,33 @@ export default function Book() {
                           }}
                         >
                           {fmtTime(m)}
+                          {isAfter && <span className="time-tag">After hours</span>}
                           {!open && <span className="sr-only"> (unavailable)</span>}
                         </button>
                       )
                     })}
                   </div>
                   {daySlots.length < dayStarts.length && <p className="times-note">Greyed-out times are not available.</p>}
+                  {isAfter && (
+                    <p className="times-note">
+                      After hours cuts are ${service.price}, any service included. Just need a regular cut?{' '}
+                      <button type="button" className="link-btn" onClick={() => chooseService(SERVICES.find((s) => !s.afterHours).id)}>
+                        Pick a regular service
+                      </button>
+                    </p>
+                  )}
                 </>
+              )}
+              {lateHint && (
+                <div className="late-hint">
+                  <span className="after-badge">After hours</span>
+                  <p>
+                    Need a later time? {lateService.name} are after closing, {priceLabel(lateService)}, any service included.
+                  </p>
+                  <button type="button" className="btn" onClick={() => chooseService(lateService.id, true)}>
+                    See late times
+                  </button>
+                </div>
               )}
               {selectedDay && dayStarts.length === 0 && <p className="empty">No times on this day. Pick another day.</p>}
               {!selectedDay && <p className="empty">Pick a day to see open times.</p>}
@@ -403,6 +436,7 @@ export default function Book() {
               <dt>Service</dt>
               <dd>
                 {service.name} ({slotFor(shop, fromKey(dateKey))} min), {priceLabel(service)}
+                {isAfter && <span className="after-badge">After hours</span>}
               </dd>
             </div>
             <div>

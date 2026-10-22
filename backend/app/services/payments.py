@@ -23,9 +23,11 @@ from ..core.brand import BRAND_NAME
 from ..core.errors import BadWebhook, NotConfigured, NotFound, PaymentUnavailable, RefundFailed
 from ..core.logs import log
 from ..database import bookings as bookings_db
+from ..domain import shop
 from ..domain.models import Booking
 from ..payments import PaymentError, webhook
 from . import notifications
+from . import settings as settings_service
 
 # How long a customer's time is held while they pay. Short on purpose: a customer who wanders off must not keep a
 # time from someone who would book it. Stripe will not make a payment page expire in under 30 minutes, so when the hold
@@ -68,6 +70,14 @@ def _return_origin(return_to: str | None) -> str:
     raise PaymentUnavailable()
 
 
+def _description(booking: Booking) -> str:
+    """The line under the service name on Stripe's page and the customer's receipt: when it is, and what the service is."""
+    when = f"{booking.day.strftime('%A, %B')} {booking.day.day} at {shop.label(booking.start)} with Vic"
+    service = settings_service.current().service(booking.service_id)
+    note = service.note if service else ""
+    return f"{when}. {note}"[:500] if note else when
+
+
 def start_checkout(booking: Booking, return_to: str | None) -> Booking:
     """Gets the payment page for a booking that is waiting for payment, and remembers it. If Stripe can't, the held time
     is given back and the customer is told to pay at the shop instead."""
@@ -82,6 +92,7 @@ def start_checkout(booking: Booking, return_to: str | None) -> Booking:
             code=booking.code,
             amount_cents=booking.amount_cents,
             product_name=f"{booking.service_name or 'Appointment'} at {BRAND_NAME.title()}",
+            description=_description(booking),
             success_url=f"{origin}/#/book?paid={booking.code}",
             cancel_url=f"{origin}/#/book?payment=cancelled",
             expires_at=int(expires.timestamp()),

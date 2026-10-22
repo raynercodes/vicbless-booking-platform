@@ -69,7 +69,8 @@ def create_booking(data: BookingIn, now: datetime) -> tuple[Booking, bool]:
     if service is None:  # Vic may have removed it since the page was loaded
         raise ValidationFailed(MSG_SERVICE, field="serviceId")
     minutes = settings.slot_for(day)  # the length is the day's setting, never something the client sends
-    shop.check_bookable(day, data.start, minutes, now)
+    shop.check_bookable(day, data.start, minutes, now, settings.after_count(day))
+    shop.check_service_fits_slot(service.after_hours, day, data.start)
     payments_service.release_expired_quietly(now)  # someone else's payment may have just run out, which frees this time
 
     def earlier_attempt() -> Booking | None:
@@ -183,8 +184,10 @@ def move_booking(booking_id: str, data: MoveIn, now: datetime) -> tuple[Booking,
     day = parse_date_key(data.dateKey)
     if (day, data.start) == (before.day, before.start):
         raise ValidationFailed("That booking is already at that time. Pick a different one.")
-    minutes = settings_service.current().slot_for(day)  # the booking takes the new day's appointment length
-    shop.check_movable(day, data.start, minutes, now)
+    settings = settings_service.current()
+    minutes = settings.slot_for(day)  # the booking takes the new day's appointment length
+    shop.check_movable(day, data.start, minutes, now, settings.after_count(day))
+    shop.check_service_fits_slot(before.service_id == shop.AFTER_HOURS_ID, day, data.start)
     after = bookings_db.move_booking(before, day=day, start=data.start, minutes=minutes)  # raises SlotTaken if not free
     log("booking_moved", fromId=before.id, toId=after.id, minutes=minutes)
     return before, after

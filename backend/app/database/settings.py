@@ -26,6 +26,30 @@ def _service_from(raw: object) -> shop.Service | None:
     return shop.Service(service_id, name, price, bool(raw.get("from", False)), str(raw.get("note", "")))
 
 
+def _after_hours_from(raw: object) -> shop.AfterHours:
+    """The stored after-hours offer, with anything unreadable replaced by the shop's starting value."""
+    base = shop.AfterHours()
+    if not isinstance(raw, dict):
+        return base
+    price, note, slots = base.price, base.note, base.slots
+    try:
+        if 0 <= int(raw["price"]) <= 999:
+            price = int(raw["price"])
+    except (KeyError, TypeError, ValueError):
+        pass
+    if isinstance(raw.get("note"), str):
+        note = raw["note"]
+    stored = raw.get("slots")
+    if isinstance(stored, list) and len(stored) == 7:
+        try:
+            parsed = tuple(int(v) for v in stored)
+        except (TypeError, ValueError):
+            parsed = ()
+        if len(parsed) == 7 and all(0 <= v <= shop.MAX_AFTER_SLOTS for v in parsed):
+            slots = parsed  # type: ignore[assignment]
+    return shop.AfterHours(price, note, slots)
+
+
 def settings_from_item(item: dict | None) -> shop.ShopSettings:
     """Turns the stored item into ShopSettings. A missing or unreadable part falls back to the shop's defaults."""
     defaults = shop.DEFAULT_SETTINGS
@@ -55,7 +79,12 @@ def settings_from_item(item: dict | None) -> shop.ShopSettings:
             parsed_hours = None
         if parsed_hours is not None and all(h in shop.REMINDER_CHOICES for h in parsed_hours):
             reminders = parsed_hours
-    return shop.ShopSettings(slot_minutes=slots, services=services, reminder_hours=reminders)
+    return shop.ShopSettings(
+        slot_minutes=slots,
+        services=services,
+        reminder_hours=reminders,
+        after_hours=_after_hours_from(item.get("afterHours")),
+    )
 
 
 def load() -> shop.ShopSettings:
@@ -76,6 +105,11 @@ def save(settings: shop.ShopSettings) -> None:
             "services": [
                 {"id": s.id, "name": s.name, "price": s.price, "from": s.from_price, "note": s.note} for s in settings.services
             ],
+            "afterHours": {
+                "price": settings.after_hours.price,
+                "note": settings.after_hours.note,
+                "slots": list(settings.after_hours.slots),
+            },
             "updatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
     )

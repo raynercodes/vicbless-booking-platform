@@ -1,8 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react'
-import { HOURS } from '../config.js'
 import { getAvailability } from '../lib/api.js'
 import { fmtTime, fromKey, keyOf, slotStarts } from '../lib/availability.js'
-import { findService, slotFor } from '../lib/shopSettings.js'
+import { AFTER_HOURS_ID, findService, hoursFor, isAfterStart, slotFor } from '../lib/shopSettings.js'
 import { useShopSettings } from '../lib/useShopSettings.js'
 import { moveBooking } from './adminApi.js'
 import { moveDateRange, moveOptions, ownStarts } from './moveTimes.js'
@@ -46,16 +45,19 @@ export default function MoveBooking({ item, onClose, onMoved }) {
     // The booking takes the appointment length of the day it is moved to (the API does the same).
     const date = fromKey(dateKey)
     const slot = slotFor(shop, date)
+    const hours = hoursFor(shop)
+    // A late booking moves only to another late time, and a regular one only to a regular time (the API checks the same).
+    const late = item.serviceId === AFTER_HOURS_ID
     return moveOptions({
       date,
-      hours: HOURS,
+      hours,
       slotMinutes: slot,
       minutes: slot,
       busy: day.busy,
-      own: sameDay ? ownStarts(item, slot, slotStarts(date, HOURS, slot)) : [],
+      own: sameDay ? ownStarts(item, slot, slotStarts(date, hours, slot)) : [],
       current: sameDay ? item.start : null,
       nowMinutes: dateKey === keyOf(now) ? now.getHours() * 60 + now.getMinutes() : null,
-    })
+    }).filter((o) => isAfterStart(date, o.start) === late)
   }, [day, dateKey, item, sameDay, shop])
 
   const anyFree = options.some((o) => o.state === 'free')
@@ -131,6 +133,7 @@ export default function MoveBooking({ item, onClose, onMoved }) {
                 onClick={() => setPicked(o.start)}
               >
                 {label}
+                {isAfterStart(fromKey(dateKey), o.start) && <span className="admin-move-late">After hours</span>}
                 {o.state === 'current' && <span className="admin-move-now">now</span>}
               </button>
             )

@@ -72,6 +72,19 @@ export const SERVICES = [
   },
 ]
 
+// After Hours Cuts: late appointments after the shop closes, one service that covers everything. It is not one of the
+// services above: it can only be booked at the after-hours times, and those times can only be booked with it.
+// Vic edits the price, the description and how many late appointments each weekday has (0 = Sunday) in Shop settings.
+// The backend starts from the same values (a backend test fails if the two ever differ).
+export const AFTER_HOURS = {
+  id: 'after-hours',
+  name: 'After Hours Cuts',
+  price: 70,
+  note: 'Late appointments after the shop closes. Any cut, design, beard or eyebrow work, all in one price.',
+  slots: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 2, 5: 2, 6: 0 }, // Thursday (4) and Friday (5): 2 late appointments each
+}
+export const MAX_AFTER_SLOTS = 6 // the most late appointments Vic can add to one day
+
 // How long one appointment is on each weekday, in minutes (0 = Sunday). Every service takes one appointment.
 // Monday and Tuesday are 45 minutes (Vic's request); the other days are 35. Vic can change any day in 5 minute steps.
 export const SLOT_MINUTES_BY_DAY = { 0: 35, 1: 45, 2: 45, 3: 35, 4: 35, 5: 35, 6: 35 }

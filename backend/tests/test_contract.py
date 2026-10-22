@@ -128,3 +128,24 @@ def test_the_consent_line_on_the_booking_form_says_what_carriers_expect():
     line = re.search(r"export const SMS_CONSENT = '([^']+)'", text)
     assert line, "frontend/src/config.js has no SMS_CONSENT"
     assert "Msg & data rates may apply" in line.group(1) and "Reply STOP to opt out" in line.group(1)
+
+
+def test_after_hours_defaults_match():
+    """After Hours Cuts starts the same on the site and in the API: id, name, price, description, and the late appointments per day."""
+    from tests.fixtures.settings import REAL_DEFAULTS
+
+    body = block(source(), "export const AFTER_HOURS = {", "\n}")
+    js_id = js_string(re.search(r"id:\s*" + STRING, body).groups())
+    js_name = js_string(re.search(r"name:\s*" + STRING, body).groups())
+    js_note = js_string(re.search(r"note:\s*" + STRING, body).groups())
+    js_price = int(re.search(r"price:\s*(\d+)", body).group(1))
+    slots = re.search(r"slots:\s*\{([^}]*)\}", body).group(1)
+    js_slots = {int(k): int(v) for k, v in re.findall(r"(\d):\s*(\d+)", slots)}
+    assert js_id == shop.AFTER_HOURS_ID and js_name == shop.AFTER_HOURS_NAME
+    assert js_price == REAL_DEFAULTS.after_hours.price and js_note == REAL_DEFAULTS.after_hours.note
+    for js_day, count in js_slots.items():
+        py_day = (js_day - 1) % 7  # JavaScript: Sunday = 0. Python: Monday = 0.
+        assert REAL_DEFAULTS.after_hours.slots[py_day] == count, f"JS day {js_day}"
+    assert len(js_slots) == 7
+    max_slots = int(re.search(r"export const MAX_AFTER_SLOTS = (\d+)", source()).group(1))
+    assert max_slots == shop.MAX_AFTER_SLOTS

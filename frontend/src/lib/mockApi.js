@@ -10,12 +10,12 @@
 // sample bookings in localStorage (through mockStore.js), so a booked, blocked or freed time
 // shows up on the customer grid and in Vic's dashboard alike.
 
-import { HOURS } from '../config.js'
 import { SlotTakenError } from './errors.js'
-import { DAY_KEYS } from './shopSettings.js'
+import { AFTER_HOURS_ID, DAY_KEYS, findService, isAfterStart } from './shopSettings.js'
 import { fromKey, slotStarts } from './availability.js'
 import {
   blockedStartsFor,
+  hoursNow,
   isDayOff,
   overlaps,
   readBookings,
@@ -44,13 +44,13 @@ function busyFor(dateKey) {
 
   // pretend-busy blocks, unless Vic cancelled them in the dashboard
   const cancelled = new Set(readCancelledSamples().filter((c) => c.dateKey === dateKey).map((c) => c.start))
-  for (const s of slotStarts(fromKey(dateKey), HOURS, slot)) {
+  for (const s of slotStarts(fromKey(dateKey), hoursNow(), slot)) {
     if (hash(dateKey + s) % 100 < 30 && !cancelled.has(s)) busy.add(s)
   }
 
   // real bookings made through the site: every appointment start they overlap is taken, whatever length they had
   const bookings = readBookings().filter((b) => b.dateKey === dateKey)
-  for (const s of slotStarts(fromKey(dateKey), HOURS, slot)) {
+  for (const s of slotStarts(fromKey(dateKey), hoursNow(), slot)) {
     if (bookings.some((b) => overlaps(s, s + slot, b.start, b.start + b.minutes))) busy.add(s)
   }
 
@@ -81,6 +81,11 @@ export async function getShopSettings() {
     services: settings.services.map((s) => ({ id: s.id, name: s.name, price: s.price, from: s.from, note: s.note })),
     slotMinutes: Object.fromEntries(DAY_KEYS.map((key, day) => [key, settings.slotMinutes[day]])),
     reminderHours: settings.reminderHours,
+    afterHours: {
+      price: settings.afterHours.price,
+      note: settings.afterHours.note,
+      slots: Object.fromEntries(DAY_KEYS.map((key, day) => [key, settings.afterHours.slots[day]])),
+    },
     payOnline: true, // the preview shows the card option; "paying" in it simply marks the booking paid
   }
 }
@@ -88,12 +93,16 @@ export async function getShopSettings() {
 export async function createBooking(payload) {
   await delay(500)
   const slot = slotMinutesOn(payload.dateKey)
-  if (busyFor(payload.dateKey).includes(payload.start) || !slotStarts(fromKey(payload.dateKey), HOURS, slot).includes(payload.start)) {
+  if (busyFor(payload.dateKey).includes(payload.start) || !slotStarts(fromKey(payload.dateKey), hoursNow(), slot).includes(payload.start)) {
+    throw new SlotTakenError()
+  }
+  // After Hours Cuts goes only in the late times, and those take only it (the real backend checks the same)
+  if ((payload.serviceId === AFTER_HOURS_ID) !== isAfterStart(fromKey(payload.dateKey), payload.start)) {
     throw new SlotTakenError()
   }
   const code = 'VB-' + hash(JSON.stringify(payload) + Date.now()).toString(36).toUpperCase().slice(0, 5)
   // The service's name is kept with the booking, like the real backend does, so a later rename does not change it.
-  const service = readShopSettings().services.find((s) => s.id === payload.serviceId)
+  const service = findService(readShopSettings(), payload.serviceId)
   // Paying online is pretended here: the booking is simply marked paid. The real API sends the customer to Stripe.
   const payment = payload.payment === 'online' ? 'paid' : 'shop'
   const amountCents = service ? service.price * 100 : 0

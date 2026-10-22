@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
-import { HOURS } from '../config.js'
 import { fmtTime, fromKey } from '../lib/availability.js'
 import { dayGrid, describeRange, findConflicts, rangeFromChoice, wholeDayRange } from './blocks.js'
-import { slotFor } from '../lib/shopSettings.js'
+import { hoursFor, isAfterStart, slotFor } from '../lib/shopSettings.js'
 import { useShopSettings } from '../lib/useShopSettings.js'
 import { addBlock } from './adminApi.js'
 
@@ -12,7 +11,8 @@ export default function BlockOff({ dateKey, items, blocks, onSaved, onClose }) {
   const shop = useShopSettings()
   const date = useMemo(() => fromKey(dateKey), [dateKey])
   const SLOT_MINUTES = slotFor(shop, date) // how long an appointment is on this day
-  const grid = useMemo(() => dayGrid({ date, hours: HOURS, slotMinutes: SLOT_MINUTES }), [date, SLOT_MINUTES])
+  const hours = useMemo(() => hoursFor(shop), [shop]) // opening hours with the late appointments added
+  const grid = useMemo(() => dayGrid({ date, hours, slotMinutes: SLOT_MINUTES }), [date, hours, SLOT_MINUTES])
 
   const [mode, setMode] = useState('part')
   const [from, setFrom] = useState(grid[0])
@@ -23,7 +23,7 @@ export default function BlockOff({ dateKey, items, blocks, onSaved, onClose }) {
 
   const choice =
     mode === 'whole'
-      ? wholeDayRange({ date, hours: HOURS })
+      ? wholeDayRange({ date, hours })
       : rangeFromChoice({ grid, fromStart: from, untilStart: until, slotMinutes: SLOT_MINUTES })
   const range = choice && !choice.error ? choice : null
   const rangeProblem = choice && choice.error ? choice.error : ''
@@ -85,6 +85,7 @@ export default function BlockOff({ dateKey, items, blocks, onSaved, onClose }) {
               {grid.map((s) => (
                 <option key={s} value={s}>
                   {fmtTime(s)}
+                  {isAfterStart(date, s) ? ' (after hours)' : ''}
                 </option>
               ))}
             </select>
@@ -95,6 +96,7 @@ export default function BlockOff({ dateKey, items, blocks, onSaved, onClose }) {
               {grid.map((s) => (
                 <option key={s} value={s}>
                   {fmtTime(s + SLOT_MINUTES)}
+                  {isAfterStart(date, s) ? ' (after hours)' : ''}
                 </option>
               ))}
             </select>

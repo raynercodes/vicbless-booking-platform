@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  AFTER_HOURS_ID,
   DAY_KEYS,
   DEFAULT_SHOP_SETTINGS,
   checkDraft,
   draftFrom,
+  afterCount,
+  afterDays,
+  afterService,
+  bookableServices,
   findService,
+  hoursFor,
+  isAfterStart,
   fromApi,
   getShopSettingsNow,
   isChanged,
@@ -85,7 +92,7 @@ describe('API shape', () => {
   })
 
   it('leaves the id off a new service', () => {
-    const s = { services: [{ id: '', name: 'Shave', price: 20, from: false, note: '' }], slotMinutes: DEFAULT_SHOP_SETTINGS.slotMinutes }
+    const s = { ...DEFAULT_SHOP_SETTINGS, services: [{ id: '', name: 'Shave', price: 20, from: false, note: '' }] }
     expect(toApi(s).services[0]).toEqual({ name: 'Shave', price: 20, from: false, note: '' })
   })
 
@@ -217,5 +224,75 @@ describe('paying online', () => {
     expect(getShopSettingsNow().payOnline).toBe(true)
     setShopSettings(fromApi(apiBody()))
     expect(getShopSettingsNow().payOnline).toBe(true)
+  })
+})
+
+describe('After Hours Cuts', () => {
+  const THURSDAY = new Date(2026, 9, 15)
+  const TUESDAY = new Date(2026, 9, 13)
+  const WEDNESDAY = new Date(2026, 9, 14)
+  const none = { ...DEFAULT_SHOP_SETTINGS, afterHours: { ...DEFAULT_SHOP_SETTINGS.afterHours, slots: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 } } }
+
+  it('starts at $70 with two late appointments on Thursday and Friday', () => {
+    expect(DEFAULT_SHOP_SETTINGS.afterHours.price).toBe(70)
+    expect(DEFAULT_SHOP_SETTINGS.afterHours.slots).toEqual({ 0: 0, 1: 0, 2: 0, 3: 0, 4: 2, 5: 2, 6: 0 })
+    expect(afterCount(DEFAULT_SHOP_SETTINGS, THURSDAY)).toBe(2)
+    expect(afterCount(DEFAULT_SHOP_SETTINGS, TUESDAY)).toBe(0)
+    expect(afterDays(DEFAULT_SHOP_SETTINGS)).toEqual(['Thu', 'Fri'])
+  })
+
+  it('is offered as a service after the others, and only while some day has late times', () => {
+    const all = bookableServices(DEFAULT_SHOP_SETTINGS)
+    expect(all.map((s) => s.id).slice(-2)).toEqual(['kids-design', AFTER_HOURS_ID])
+    expect(all.at(-1)).toMatchObject({ name: 'After Hours Cuts', price: 70, from: false, afterHours: true })
+    expect(afterService(none)).toBeNull()
+    expect(bookableServices(none)).toHaveLength(5)
+    expect(findService(DEFAULT_SHOP_SETTINGS, AFTER_HOURS_ID).price).toBe(70)
+  })
+
+  it('adds a window after closing that holds the late appointments', () => {
+    const hours = hoursFor(DEFAULT_SHOP_SETTINGS)
+    expect(hours[4]).toEqual([[660, 1140], [1140, 1210, 'after']]) // Thursday, 35 minute appointments
+    expect(hours[1]).toEqual([[720, 1080]]) // Monday has none
+    expect(hours[3]).toBeNull()
+    expect(hoursFor(none)[4]).toEqual([[660, 1140]])
+  })
+
+  it('never runs past midnight', () => {
+    const lots = { ...DEFAULT_SHOP_SETTINGS, slotMinutes: { ...DEFAULT_SHOP_SETTINGS.slotMinutes, 4: 120 }, afterHours: { ...DEFAULT_SHOP_SETTINGS.afterHours, slots: { ...DEFAULT_SHOP_SETTINGS.afterHours.slots, 4: 6 } } }
+    expect(hoursFor(lots)[4].at(-1)).toEqual([1140, 1440, 'after'])
+  })
+
+  it('tells late starts from regular ones', () => {
+    expect(isAfterStart(THURSDAY, 1140)).toBe(true)
+    expect(isAfterStart(THURSDAY, 1080)).toBe(false)
+    expect(isAfterStart(WEDNESDAY, 1140)).toBe(false) // closed
+  })
+
+  it('round-trips through the API shape', () => {
+    const api = toApi(DEFAULT_SHOP_SETTINGS)
+    expect(api.afterHours).toEqual({ price: 70, note: DEFAULT_SHOP_SETTINGS.afterHours.note, slots: { sun: 0, mon: 0, tue: 0, wed: 0, thu: 2, fri: 2, sat: 0 } })
+    expect(fromApi(api).afterHours).toEqual(DEFAULT_SHOP_SETTINGS.afterHours)
+  })
+
+  it('keeps the starting offer when an older answer has none, and refuses a damaged one', () => {
+    const { afterHours, ...old } = apiBody()
+    expect(fromApi(old).afterHours).toEqual(DEFAULT_SHOP_SETTINGS.afterHours)
+    expect(fromApi({ ...apiBody(), afterHours: { ...afterHours, slots: { ...afterHours.slots, thu: 7 } } })).toBeNull()
+    expect(fromApi({ ...apiBody(), afterHours: { ...afterHours, price: '70' } })).toBeNull()
+    expect(fromApi({ ...apiBody(), afterHours: null })).toBeNull()
+  })
+
+  it('checks what Vic types for it', () => {
+    const draft = draftFrom(DEFAULT_SHOP_SETTINGS)
+    const ok = checkDraft(draft)
+    expect(ok.ok).toBe(true)
+    expect(ok.settings.afterHours).toEqual(DEFAULT_SHOP_SETTINGS.afterHours)
+    const bad = checkDraft({ ...draft, after: { price: 'abc', note: 'x'.repeat(121), slots: { ...draft.after.slots, 4: '9', 5: '' } } })
+    expect(bad.ok).toBe(false)
+    expect(bad.errors.after.price).toBeTruthy()
+    expect(bad.errors.after.note).toBeTruthy()
+    expect(Object.keys(bad.errors.after.slots).sort()).toEqual(['4', '5'])
+    expect(isChanged({ ...draft, after: { ...draft.after, price: '80' } }, DEFAULT_SHOP_SETTINGS)).toBe(true)
   })
 })

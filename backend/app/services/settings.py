@@ -69,6 +69,15 @@ def save(data: SettingsIn) -> shop.ShopSettings:
         reminder_hours=(
             tuple(sorted(data.reminderHours, reverse=True)) if data.reminderHours is not None else current().reminder_hours
         ),
+        after_hours=(
+            shop.AfterHours(
+                price=data.afterHours.price,
+                note=data.afterHours.note,
+                slots=tuple(data.afterHours.slots[key] for key in shop.WEEKDAY_KEYS),  # type: ignore[arg-type]
+            )
+            if data.afterHours is not None
+            else current().after_hours
+        ),
     )
     settings_db.save(updated)
     log("settings_saved", services=len(updated.services), slotMinutes=list(updated.slot_minutes), reminderHours=list(updated.reminder_hours))
@@ -86,4 +95,11 @@ def to_view(settings: shop.ShopSettings) -> dict:
         ],
         "slotMinutes": dict(zip(shop.WEEKDAY_KEYS, settings.slot_minutes)),
         "reminderHours": list(settings.reminder_hours),
+        "afterHours": {
+            "id": shop.AFTER_HOURS_ID,
+            "name": shop.AFTER_HOURS_NAME,
+            "price": settings.after_hours.price,
+            "note": settings.after_hours.note,
+            "slots": dict(zip(shop.WEEKDAY_KEYS, settings.after_hours.slots)),
+        },
     }

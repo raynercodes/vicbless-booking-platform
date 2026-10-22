@@ -24,14 +24,14 @@ export function buildDayRows({ date, hours, items, blocks = [], slotMinutes = 35
   }
 
   const shown = new Set()
-  const groups = windows.map(([open, close]) => {
+  const groups = windows.map(([open, close, kind]) => {
     const rows = []
     for (let start = open; start + slotMinutes <= close; start += slotMinutes) {
       const hit = byStart.get(start)
       if (hit) shown.add(hit.item)
       rows.push({ start, ...(hit || { kind: 'open' }) })
     }
-    return { open, close, rows }
+    return { open, close, rows, after: kind === 'after' }
   })
 
   const allRows = groups.flatMap((g) => g.rows)

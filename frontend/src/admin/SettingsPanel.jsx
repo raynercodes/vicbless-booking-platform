@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from 'react'
-import { HOURS, MAX_SERVICES, REMINDER_CHOICES, SLOT_MAX, SLOT_MIN, SLOT_STEP } from '../config.js'
+import { AFTER_HOURS, HOURS, MAX_AFTER_SLOTS, MAX_SERVICES, REMINDER_CHOICES, SLOT_MAX, SLOT_MIN, SLOT_STEP } from '../config.js'
 import { fmtTime } from '../lib/availability.js'
 import {
   DAY_NAMES,
@@ -17,6 +17,8 @@ import {
 } from '../lib/shopSettings.js'
 import { getAdminSettings, saveSettings } from './adminApi.js'
 
+const NO_ERRORS = { general: '', services: {}, slots: {}, after: { slots: {} } }
+
 // Monday first, the way people read a week (the numbers are JavaScript's: 0 is Sunday).
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]
 
@@ -27,12 +29,13 @@ const hoursText = (day) => {
 
 // Vic's shop settings, only reachable from inside his dashboard (Menu > Settings > Shop settings):
 //   - the services, their prices and notes (add, rename, reorder, remove)
+//   - After Hours Cuts: its price, its description, and how many late appointments each open weekday has
 //   - how long an appointment is on each weekday, in steps of 5 minutes
 // Saving changes what customers see and book straight away. Bookings already made keep their times and names.
 export default function SettingsPanel({ onClose }) {
   const [saved, setSaved] = useState(null) // the settings as last saved, in the screens' shape
   const [draft, setDraft] = useState(null) // what Vic is editing
-  const [errors, setErrors] = useState({ general: '', services: {}, slots: {} })
+  const [errors, setErrors] = useState(NO_ERRORS)
   const [status, setStatus] = useState('loading') // loading | ready | error
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -82,7 +85,7 @@ export default function SettingsPanel({ onClose }) {
     e.preventDefault()
     if (saving) return
     const result = checkDraft(draft)
-    setErrors(result.ok ? { general: '', services: {}, slots: {} } : result.errors)
+    setErrors(result.ok ? NO_ERRORS : result.errors)
     if (!result.ok) {
       setFailure('Some things need fixing. They are marked below.')
       return
@@ -199,6 +202,60 @@ export default function SettingsPanel({ onClose }) {
           Add a service
         </button>
         {draft.services.length >= MAX_SERVICES && <p className="admin-meta">That is the most you can list ({MAX_SERVICES}).</p>}
+      </fieldset>
+
+      <fieldset className="admin-settings-group admin-after-group">
+        <legend>{AFTER_HOURS.name}</legend>
+        <p className="admin-meta">
+          Late appointments that start the moment the shop closes. Customers book them as one service with its own price, and they
+          are marked "After hours" on the site. Set how many each day has: 0 turns the day off, and you can add up to {MAX_AFTER_SLOTS}.
+        </p>
+        <div className="admin-svc-price">
+          <div className="field">
+            <label htmlFor={`${uid}-ap`}>Price ($)</label>
+            <input id={`${uid}-ap`} inputMode="numeric" value={draft.after.price} maxLength={3} aria-invalid={!!errors.after.price} onChange={(ev) => touch((d) => ({ ...d, after: { ...d.after, price: ev.target.value } }))} />
+            {errors.after.price && <p className="err">{errors.after.price}</p>}
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor={`${uid}-an`}>
+            Description <span className="hint">(shown under the service)</span>
+          </label>
+          <input id={`${uid}-an`} value={draft.after.note} aria-invalid={!!errors.after.note} onChange={(ev) => touch((d) => ({ ...d, after: { ...d.after, note: ev.target.value } }))} />
+          <p className="counter">
+            {draft.after.note.length}/{NOTE_MAX}
+          </p>
+          {errors.after.note && <p className="err">{errors.after.note}</p>}
+        </div>
+        <ul className="admin-slot-list">
+          {WEEK_ORDER.filter((day) => HOURS[day]).map((day) => {
+            const windows = HOURS[day]
+            return (
+              <li key={day} className="admin-slot-row">
+                <div className="admin-slot-day">
+                  <label htmlFor={`${uid}-a-${day}`}>{DAY_NAMES[day]}</label>
+                  <span className="admin-meta">Starting at {fmtTime(windows[windows.length - 1][1])}</span>
+                </div>
+                <div className="admin-slot-input">
+                  <input
+                    id={`${uid}-a-${day}`}
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={MAX_AFTER_SLOTS}
+                    step={1}
+                    value={draft.after.slots[day]}
+                    aria-invalid={!!errors.after.slots[day]}
+                    onChange={(ev) => touch((d) => ({ ...d, after: { ...d.after, slots: { ...d.after.slots, [day]: ev.target.value } } }))}
+                  />
+                  <span aria-hidden="true">late</span>
+                </div>
+                {errors.after.slots[day] && <p className="err">{errors.after.slots[day]}</p>}
+              </li>
+            )
+          })}
+        </ul>
+        <p className="admin-meta">Each late appointment is as long as that day's appointment length (below).</p>
       </fieldset>
 
       <fieldset className="admin-settings-group">

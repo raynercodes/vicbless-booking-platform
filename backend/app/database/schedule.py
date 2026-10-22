@@ -62,7 +62,7 @@ def availability(first: date, last: date, settings: shop.ShopSettings) -> dict[s
             entry["dayOff"] = True
     for day_key, entry in days.items():
         day = date.fromisoformat(day_key)
-        entry["busy"] = shop.busy_slots(day, entry["slotMinutes"], taken[day_key])
+        entry["busy"] = shop.busy_slots(day, entry["slotMinutes"], taken[day_key], settings.after_count(day))
     return days
 
 

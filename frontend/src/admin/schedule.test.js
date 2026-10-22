@@ -150,3 +150,27 @@ describe('blocked time', () => {
     expect(buildDayRows({ date: WEDNESDAY, hours: HOURS, items: [], blocks: [block(at(12), at(18))] }).closed).toBe(true)
   })
 })
+
+describe('after hours', () => {
+  const THURSDAY = new Date(2026, 9, 15)
+  const withLate = { ...HOURS, 4: [[at(11), at(19)], [at(19), at(20, 10), 'after']] }
+
+  it('shows the late appointments as their own group, after the regular ones', () => {
+    const v = buildDayRows({ date: THURSDAY, hours: withLate, items: [], slotMinutes: 35 })
+    expect(v.groups.map((g) => g.after)).toEqual([false, true])
+    expect(v.groups[1].rows.map((r) => r.start)).toEqual([at(19), at(19, 35)])
+  })
+
+  it('puts a late booking on its late row', () => {
+    const item = { id: 'a', start: at(19, 35), minutes: 35 }
+    const v = buildDayRows({ date: THURSDAY, hours: withLate, items: [item], slotMinutes: 35 })
+    expect(v.groups[1].rows[1]).toMatchObject({ kind: 'booking', item })
+    expect(v.unmatched).toEqual([])
+  })
+
+  it('lists a late booking that no longer has a late row among the other items', () => {
+    const item = { id: 'a', start: at(19), minutes: 35 }
+    const v = buildDayRows({ date: THURSDAY, hours: HOURS, items: [item], slotMinutes: 35 })
+    expect(v.unmatched).toEqual([item])
+  })
+})

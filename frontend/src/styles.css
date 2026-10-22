@@ -1146,6 +1146,82 @@ html[data-motion='off'] .switch-track::after {
   color: var(--on-accent);
 }
 
+/* After Hours Cuts: always outlined in purple with an "After hours" label, so it never looks like a regular time. */
+.after-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.opt-after {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 18px -6px var(--accent);
+}
+
+.opt-after .after-badge {
+  align-self: center;
+}
+
+.time-after {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 14px -6px var(--accent);
+}
+
+.time-tag {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.time-after[aria-pressed='true'] .time-tag {
+  color: inherit;
+}
+
+.time-after:disabled {
+  box-shadow: none;
+}
+
+.late-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+}
+
+.late-hint p {
+  flex: 1 1 200px;
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.link-btn {
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
 .empty {
   padding: 18px;
   color: var(--muted);

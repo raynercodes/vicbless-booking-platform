@@ -10,22 +10,26 @@ from ..database import blocks as blocks_db
 from ..domain import shop
 from ..domain.models import Block
 from ..schemas.requests import BlockIn, parse_date_key
+from . import settings as settings_service
 
 
 def add_block(data: BlockIn, now: datetime) -> Block:
     """Blocks off part of a day, or all of it. Customers then see those times as taken (or the day as Closed)."""
     day = parse_date_key(data.dateKey)
     shop.check_blockable(day, now)  # open day, from today up to a year ahead
-    windows = shop.windows_for(day)
+    settings = settings_service.current()
+    slot, after = settings.slot_for(day), settings.after_count(day)
+    windows = shop.all_windows(day, slot, after)
     if data.whole:
-        # A whole day off runs from the first opening time to the last closing time (Saturday's lunch gap included).
+        # A whole day off runs from the first opening time to the last closing time (Saturday's lunch gap included,
+        # and the after-hours appointments too).
         start, end = windows[0][0], windows[-1][1]
     else:
         start, end = data.start, data.end
         if end <= start:
             raise ValidationFailed("The end time has to be after the start time.")
     # Turn the range into the 5 minute units it covers (only inside opening hours).
-    claims = shop.block_units(day, start, end)
+    claims = shop.block_units(day, start, end, slot, after)
     if not claims:
         raise InvalidSlot("Pick times that fall inside opening hours.")
     # The database refuses (Conflict) if any of those blocks already holds a booking or another block-off.

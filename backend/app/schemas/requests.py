@@ -60,6 +60,7 @@ MSG_SLOTS = (
     f"Each appointment length has to be between {shop.MIN_SLOT_MINUTES} and {shop.MAX_SLOT_MINUTES} minutes, "
     f"in steps of {shop.UNIT_MINUTES}."
 )
+MSG_AFTER_SLOTS = f"Pick 0 to {shop.MAX_AFTER_SLOTS} after-hours appointments for every day of the week."
 MSG_REMINDERS = "Pick reminder times from the list."
 MSG_SLOT_DAYS = "Set an appointment length for every day of the week."
 
@@ -307,6 +308,38 @@ class ServiceIn(BaseModel):
         return v
 
 
+class AfterHoursIn(BaseModel):
+    """Vic's After Hours Cuts settings: its price and description, and how many late appointments each weekday has."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    price: StrictInt
+    note: str | None = None
+    slots: dict[str, StrictInt]  # {"mon": 0, ... "thu": 2, ...}
+
+    @field_validator("price")
+    @classmethod
+    def _price(cls, v: int) -> int:
+        if not 0 <= v <= SERVICE_PRICE_MAX:
+            raise ValueError(MSG_SERVICE_PRICE)
+        return v
+
+    @field_validator("note")
+    @classmethod
+    def _note(cls, v: str | None) -> str:
+        v = one_line(v or "")
+        if len(v) > SERVICE_NOTE_MAX:
+            raise ValueError(MSG_SERVICE_NOTE)
+        return v
+
+    @field_validator("slots")
+    @classmethod
+    def _slots(cls, v: dict[str, int]) -> dict[str, int]:
+        if set(v) != set(shop.WEEKDAY_KEYS) or any(not 0 <= n <= shop.MAX_AFTER_SLOTS for n in v.values()):
+            raise ValueError(MSG_AFTER_SLOTS)
+        return v
+
+
 class SettingsIn(BaseModel):
     """Vic saving his settings (PUT /api/admin/settings): the whole list of services, and an appointment length per day."""
 
@@ -314,6 +347,7 @@ class SettingsIn(BaseModel):
 
     services: list[ServiceIn]
     slotMinutes: dict[str, StrictInt]  # {"mon": 45, "tue": 45, ...} every weekday, in minutes
+    afterHours: AfterHoursIn | None = None  # After Hours Cuts; left out = keep what is saved
     reminderHours: list[StrictInt] | None = None  # hours before an appointment; [] = none; left out = keep what is saved
 
     @field_validator("services")

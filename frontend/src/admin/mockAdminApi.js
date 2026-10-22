@@ -13,12 +13,12 @@
 // blocks the public mock marks as taken, so the schedule and the customer-facing time grid always
 // agree. Sample ones are marked so they are never mistaken for real customers.
 
-import { HOURS } from '../config.js'
 import { getBusy } from '../lib/mockApi.js'
 import { fromKey, slotStarts } from '../lib/availability.js'
-import { fromApi, toApi } from '../lib/shopSettings.js'
+import { afterService, fromApi, isAfterStart, toApi } from '../lib/shopSettings.js'
 import {
   blockedStartsFor,
+  hoursNow,
   overlaps,
   readBlocks,
   readBookings,
@@ -76,8 +76,8 @@ const NOTES = ['Wants it shorter on the sides', 'Bringing his son next', 'Regula
 
 function sampleItem(dateKey, start) {
   const h = hash(`${dateKey}|sample|${start}`)
-  const services = readShopSettings().services
-  const service = services[h % services.length]
+  const settings = readShopSettings()
+  const service = isAfterStart(fromKey(dateKey), start) ? afterService(settings) : settings.services[h % settings.services.length]
   return {
     id: `sample-${dateKey}-${start}`,
     dateKey,
@@ -160,7 +160,7 @@ export async function addBlock({ dateKey, start, end, note = '', whole = false }
   await delay(250)
   const day = await getDay(dateKey)
   const slot = slotMinutesOn(dateKey)
-  const grid = slotStarts(fromKey(dateKey), HOURS, slot)
+  const grid = slotStarts(fromKey(dateKey), hoursNow(), slot)
   const conflicts = findConflicts({ range: { start, end }, grid, items: day.items, blocks: day.blocks, slotMinutes: slot })
   if (conflicts.bookings.length > 0 || conflicts.blocks.length > 0) {
     const error = new Error('That time overlaps a booking or blocked time.')
@@ -191,7 +191,7 @@ export async function moveBooking(item, { dateKey, start }) {
   await delay(300)
   // The booking takes the new day's appointment length, like the real backend.
   const slot = slotMinutesOn(dateKey)
-  if (!slotStarts(fromKey(dateKey), HOURS, slot).includes(start)) {
+  if (!slotStarts(fromKey(dateKey), hoursNow(), slot).includes(start)) {
     const error = new Error('That is not a time Vic works.')
     error.code = 'INVALID'
     throw error
@@ -255,6 +255,7 @@ export async function saveSettings(body) {
     services: body.services.map((s) => ({ ...s, id: s.id || `svc-${Math.random().toString(16).slice(2, 8)}` })),
     slotMinutes: body.slotMinutes,
     reminderHours: body.reminderHours,
+    afterHours: body.afterHours,
   })
   if (!parsed) throw new Error('Those settings are not valid.')
   const saved = toApi(parsed)

@@ -66,7 +66,7 @@ class StripeClient:
 
     def create_checkout_session(
         self, *, booking_id: str, code: str, amount_cents: int, product_name: str, success_url: str, cancel_url: str,
-        expires_at: int, customer_email: str = "",
+        expires_at: int, customer_email: str = "", description: str = "",
     ) -> CheckoutSession:  # fmt: skip
         """A payment page for one booking. `expires_at` (Unix time) must be 30 minutes to 24 hours from now."""
         answer = self._call(
@@ -84,7 +84,7 @@ class StripeClient:
                 "line_items": [
                     {
                         "quantity": 1,
-                        "price_data": {"currency": "usd", "unit_amount": amount_cents, "product_data": {"name": product_name}},
+                        "price_data": {"currency": "usd", "unit_amount": amount_cents, "product_data": {"name": product_name, "description": description or None}},
                     }
                 ],
             },

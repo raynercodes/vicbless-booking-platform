@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { HOURS } from '../config.js'
 import { fmtTime, fromKey, keyOf } from '../lib/availability.js'
 import { formatPhone, mailtoHref, telHref } from '../lib/format.js'
-import { findService, slotFor } from '../lib/shopSettings.js'
+import { AFTER_HOURS_ID, findService, hoursFor, slotFor } from '../lib/shopSettings.js'
 import { useShopSettings } from '../lib/useShopSettings.js'
 import BlockOff from './BlockOff.jsx'
 import ConfirmBox from './ConfirmBox.jsx'
@@ -44,7 +43,7 @@ function BookingCard({ item, ctl }) {
   const confirming = ctl.isCancelling(item)
   const moving = ctl.isMoving(item)
   return (
-    <article className="admin-card">
+    <article className={item.serviceId === AFTER_HOURS_ID ? 'admin-card admin-card-after' : 'admin-card'}>
       <div className="admin-card-head">
         <h3>
           {item.name}
@@ -58,6 +57,7 @@ function BookingCard({ item, ctl }) {
       </div>
       <p className="admin-meta">
         {serviceName}, {item.minutes} min
+        {item.serviceId === AFTER_HOURS_ID && <span className="after-badge">After hours</span>}
       </p>
       <p className="admin-pay-row">
         <span className={`pay-badge pay-${pay.state}`}>
@@ -199,7 +199,7 @@ export default function Schedule() {
       state.status === 'ready'
         ? buildDayRows({
             date: fromKey(dateKey),
-            hours: HOURS,
+            hours: hoursFor(shop),
             items: state.day.items,
             blocks: state.day.blocks,
             slotMinutes: slotFor(shop, fromKey(dateKey)),
@@ -389,13 +389,14 @@ export default function Schedule() {
 function GroupRows({ group, previous, ctl }) {
   return (
     <>
-      {previous && (
+      {previous && !group.after && (
         <li className="admin-break">
           Break, {fmtTime(previous.close)} to {fmtTime(group.open)}
         </li>
       )}
+      {group.after && <li className="admin-after-divider">After hours</li>}
       {group.rows.map((row) => (
-        <li key={row.start} className={`admin-row admin-${row.kind}`}>
+        <li key={row.start} className={`admin-row admin-${row.kind}${group.after ? ' admin-row-after' : ''}`}>
           <span className="admin-time">{fmtTime(row.start)}</span>
           <div className="admin-slot">
             {row.kind === 'booking' && <BookingCard item={row.item} ctl={ctl} />}

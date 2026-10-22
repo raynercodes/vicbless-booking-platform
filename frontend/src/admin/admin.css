@@ -1230,3 +1230,39 @@
 .pay-pending {
   color: #f0b44c;
 }
+
+/* After Hours Cuts on Vic's dashboard: purple outline and an "After hours" label, like on the booking page. */
+.admin-card-after {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 16px -8px var(--accent);
+}
+
+.admin-meta .after-badge {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.admin-after-divider {
+  list-style: none;
+  margin: 18px 0 6px;
+  padding: 4px 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+
+.admin-move-late {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.admin-after-group {
+  border-color: var(--accent);
+}

@@ -103,6 +103,15 @@ Reminders: the same Lambda runs `services/reminders.py` every 15 minutes (EventB
 Vic chooses the times (24 and 2 hours before to start with) in Shop settings. Each one is marked on the booking as sent first,
 so it goes out once.
 
+## After Hours Cuts
+
+Late appointments after the shop closes, sold as one service (`after-hours`, "After Hours Cuts", $70 to start). It is separate from the services Vic lists: it can only be booked at the after-hours times, and those times can only be booked with it (the API refuses any other pairing, for customers and when Vic moves a booking).
+
+- The late times start at the day's closing time and run back to back, each as long as that day's appointment length. Thursday and Friday start with 2 each. Vic changes the price, the description and the number per weekday (0 to 6) in Menu > Settings > Shop settings > After Hours Cuts. Closed days never have any.
+- Blocking a whole day off also blocks its late times, and Vic can block just the late times.
+- The Stripe payment page shows the date, the time and the service note under the service name, for every service.
+- Settings are stored in the same settings item (`afterHours`: price, note, slots per weekday). Nothing needs migrating: a settings item saved before this existed simply starts from the defaults.
+
 ## Paying online (Stripe)
 A customer can choose "Pay online now" on the booking form (only offered once both secrets below exist, so nothing breaks
 before then). The booking is made at once and its time is **held for 10 minutes** (`payment = pending`, `HOLD_MINUTES` in `services/payments.py`) while they pay on
