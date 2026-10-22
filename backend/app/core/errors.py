@@ -89,3 +89,26 @@ class NotConfigured(ApiError):
     status = 503
     code = "not_configured"
     default_message = "This part of the service isn't set up yet."
+
+
+class PaymentUnavailable(ApiError):
+    """Stripe could not be reached or refused, or online payment is not set up."""
+
+    status = 503
+    code = "payment_unavailable"
+    default_message = "Online payment isn't available right now. Please choose to pay at the shop, or try again in a minute."
+
+
+class RefundFailed(ApiError):
+    status = 502
+    code = "refund_failed"
+    default_message = (
+        "The card couldn't be refunded, so nothing was cancelled. Try again in a minute, "
+        "or refund it in your Stripe dashboard first."
+    )
+
+
+class BadWebhook(ApiError):
+    status = 400
+    code = "bad_signature"
+    default_message = "That message did not come from Stripe."

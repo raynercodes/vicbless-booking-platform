@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cancelMessage, textsLabel, whoIsTold } from './notify'
+import { cancelMessage, money, paymentLabel, textsLabel, whoIsTold } from './notify'
 
 const base = { name: 'Rayner Codes', smsConsent: false, email: '' }
 const msg = (o) => cancelMessage({ ...base, ...o }, '3:05 pm', "Men's haircut with design")
@@ -35,5 +35,38 @@ describe('texts label', () => {
   it('has a mark and words either way', () => {
     expect(textsLabel({ smsConsent: true })).toEqual({ mark: '✓', words: 'Text Reminders', on: true })
     expect(textsLabel({})).toEqual({ mark: '✗', words: 'No Text Reminders', on: false })
+  })
+})
+
+describe('money', () => {
+  it('writes dollars, with cents only when there are some', () => {
+    expect(money(5500)).toBe('$55')
+    expect(money(6550)).toBe('$65.50')
+    expect(money(5)).toBe('$0.05')
+  })
+  it('says nothing for no amount', () => {
+    for (const v of [0, -1, undefined, null, 12.5, '5500']) expect(money(v)).toBe('')
+  })
+})
+
+describe('payment', () => {
+  it('labels how the customer pays', () => {
+    expect(paymentLabel({ payment: 'paid', amountCents: 5500 })).toEqual({ state: 'paid', mark: '✓', words: 'Paid online · $55' })
+    expect(paymentLabel({ payment: 'shop', amountCents: 6500 })).toEqual({ state: 'shop', mark: '$', words: 'Pay at the shop · $65' })
+    expect(paymentLabel({ payment: 'pending', amountCents: 5500 })).toMatchObject({ state: 'pending', words: 'Waiting for payment · $55' })
+  })
+  it('treats a booking from before payments existed as paying at the shop, with no amount', () => {
+    expect(paymentLabel({})).toEqual({ state: 'shop', mark: '$', words: 'Pay at the shop' })
+  })
+  it('warns that a paid booking is refunded when cancelled', () => {
+    const m = msg({ payment: 'paid', amountCents: 5500, smsConsent: true })
+    expect(m).toContain('They paid $55 online, and it is refunded to their card automatically.')
+    expect(m).toContain('a text saying')
+  })
+  it('says the payment page is closed when it was still waiting for payment', () => {
+    expect(msg({ payment: 'pending', amountCents: 5500 })).toContain('payment page is closed')
+  })
+  it('says nothing about money for a booking paid at the shop', () => {
+    expect(msg({ payment: 'shop', amountCents: 5500 })).not.toMatch(/paid|refund|payment/)
   })
 })

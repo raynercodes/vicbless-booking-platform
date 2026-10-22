@@ -6,15 +6,22 @@ import { DAYS_AHEAD, HOURS, LIMITS, SMS_CONSENT, STAFF, SUCCESS_HEADLINE } from 
 import { fmtTime, fromKey, keyOf, slotsForDay, startsForDay } from '../lib/availability.js'
 import { createBooking, getAvailability, SlotTakenError } from '../lib/api.js'
 import { countLabel, nearLimit, priceLabel, serviceIdFromHash } from '../lib/format.js'
+import { clearPending, loadPending, readReturn, savePending, tabStorage } from '../lib/paymentReturn.js'
 import { slotFor } from '../lib/shopSettings.js'
 import { useShopSettings } from '../lib/useShopSettings.js'
 
 const STEPS = ['Service', 'Time', 'Details']
 const REFRESH_MS = 30000 // how often the time grid re-checks while it is open
-const payLine = (s) =>
-  s.from
+const payLine = (s, paidOnline = false) => {
+  if (paidOnline) {
+    return s.from
+      ? `Paid online. You paid the starting price of $${s.price}. Vic settles any difference at the shop.`
+      : `Paid online. $${s.price} total, thank you.`
+  }
+  return s.from
     ? `Pay at the shop. Starts at $${s.price}, the final price depends on what you get.`
     : `Pay at the shop. $${s.price} total.`
+}
 
 function buildDays() {
   const start = new Date()
@@ -50,17 +57,35 @@ export default function Book() {
     [availability],
   )
   const [loadError, setLoadError] = useState(false)
+  // Back from Stripe: #/book?paid=CODE (they paid) or #/book?payment=cancelled (they did not). What they were booking was
+  // remembered before they left, so they land on their confirmation, or back on their filled-in form to try again.
+  const [back] = useState(() => {
+    const kind = readReturn(window.location.hash)
+    return kind ? { ...kind, pending: loadPending(tabStorage()) } : null
+  })
+  const resumed = back && back.kind === 'cancelled' ? back.pending : null
   // A service link on the home page (#/book?service=mens-design) arrives with the service chosen.
-  const [preselected] = useState(() => serviceIdFromHash(window.location.hash, shop.services))
-  const [step, setStep] = useState(preselected ? 1 : 0)
+  const [preselected] = useState(() => (resumed ? resumed.request.serviceId : serviceIdFromHash(window.location.hash, shop.services)))
+  const [step, setStep] = useState(resumed ? 2 : preselected ? 1 : 0)
   const [serviceId, setServiceId] = useState(preselected)
-  const [dateKey, setDateKey] = useState(null)
-  const [time, setTime] = useState(null)
-  const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '', sms: false })
+  const [dateKey, setDateKey] = useState(resumed ? resumed.request.dateKey : null)
+  const [time, setTime] = useState(resumed ? resumed.request.time : null)
+  const [form, setForm] = useState(resumed ? { ...resumed.request.form } : { name: '', phone: '', email: '', notes: '', sms: false, pay: 'shop' })
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
-  const [notice, setNotice] = useState('')
-  const [done, setDone] = useState(null)
+  const [notice, setNotice] = useState(
+    back && back.kind === 'cancelled'
+      ? "Your payment wasn't completed. Your time is only held for 10 minutes, so pay now or choose to pay at the shop."
+      : '',
+  )
+  // They paid: the booking they made before leaving, or just its code if this browser forgot the rest.
+  const [done, setDone] = useState(() => {
+    if (!back || back.kind !== 'paid') return null
+    const saved = back.pending && back.pending.booking.code === back.code ? back.pending.booking : null
+    return { ...(saved || { code: back.code, name: '', serviceId: '', dateKey: null, start: null }), payment: 'paid' }
+  })
+  // A time held for this customer while they pay shows as taken to everyone, themselves included, so it is not "just taken".
+  const ownHold = resumed ? { dateKey: resumed.request.dateKey, time: resumed.request.time } : null
 
   const service = SERVICES.find((s) => s.id === serviceId) || null
 
@@ -123,6 +148,7 @@ export default function Book() {
   // If the time you picked gets taken while the page is open, say so and let you pick again.
   useEffect(() => {
     if (time === null || !dateKey || !busy) return
+    if (ownHold && ownHold.dateKey === dateKey && ownHold.time === time) return
     if (!(slotsByDay[dateKey] || []).includes(time)) {
       setTime(null)
       setNotice('That time was just taken. Pick another time.')
@@ -130,6 +156,9 @@ export default function Book() {
   }, [slotsByDay])
 
   const reach = !service ? 0 : time === null ? 1 : 2
+  // Card payment is offered when the API says it is set up and the service costs something; the choice is theirs.
+  const canPayOnline = shop.payOnline === true && !!service && service.price > 0
+  const wantsOnline = canPayOnline && form.pay === 'online'
 
   function chooseService(id) {
     if (id !== serviceId) setTime(null)
@@ -165,7 +194,16 @@ export default function Book() {
         email: form.email.trim(),
         notes: form.notes.trim(),
         smsConsent: form.sms,
+        payment: wantsOnline ? 'online' : 'shop',
+        returnTo: window.location.origin,
       })
+      if (booking.checkoutUrl) {
+        // Off to Stripe to pay. What they were booking is remembered for when they come back (or turn back).
+        savePending(tabStorage(), { request: { serviceId: service.id, dateKey, time, form: { ...form, pay: 'online' } }, booking })
+        window.location.assign(booking.checkoutUrl)
+        return // the page is leaving: the button keeps saying so
+      }
+      clearPending(tabStorage())
       setDone(booking)
     } catch (ex) {
       if (ex instanceof SlotTakenError) {
@@ -185,9 +223,8 @@ export default function Book() {
           ),
         )
       }
-    } finally {
-      setSubmitting(false)
     }
+    setSubmitting(false)
   }
 
   if (done) {
@@ -201,15 +238,21 @@ export default function Book() {
           <Reveal as="h1" from="above" className="done-headline">
             <span>{SUCCESS_HEADLINE[0]}</span> <span className="done-line-2">{SUCCESS_HEADLINE[1]}</span>
           </Reveal>
-          <h2 className="book-title done-booked">You're booked, {done.name.split(' ')[0]}.</h2>
+          <h2 className="book-title done-booked">{done.name ? `You're booked, ${done.name.split(' ')[0]}.` : "You're booked."}</h2>
           <p className="code" aria-label="Confirmation code">{done.code}</p>
-          <p>
-            <strong>{booked.name}</strong> with {staff.name}
-          </p>
-          <p>
-            {dayLabel(fromKey(done.dateKey))} at {fmtTime(done.start)}
-          </p>
-          {current && <p>{payLine(booked)}</p>}
+          {done.dateKey ? (
+            <>
+              <p>
+                <strong>{booked.name}</strong> with {staff.name}
+              </p>
+              <p>
+                {dayLabel(fromKey(done.dateKey))} at {fmtTime(done.start)}
+              </p>
+              {current && <p>{payLine(booked, done.payment === 'paid')}</p>}
+            </>
+          ) : (
+            <p>Your payment went through and Vic has your booking. Thank you!</p>
+          )}
           <p className="muted">
             Need to change it? Email <EmailLink /> and quote your code.
           </p>
@@ -404,13 +447,36 @@ export default function Book() {
                 {countLabel(form.notes.length, LIMITS.notes)}
               </p>
             </div>
-            <p className="muted">Pay at the shop. No card needed to book.</p>
+            {canPayOnline ? (
+              <fieldset className="pay-choice">
+                <legend>How would you like to pay?</legend>
+                <label className="pay-option" htmlFor="f-pay-shop">
+                  <input id="f-pay-shop" type="radio" name="pay" value="shop" checked={!wantsOnline} onChange={updateField} />
+                  <span>
+                    <strong>Pay at the shop</strong>
+                    <span className="hint">No card needed to book.</span>
+                  </span>
+                </label>
+                <label className="pay-option" htmlFor="f-pay-online">
+                  <input id="f-pay-online" type="radio" name="pay" value="online" checked={wantsOnline} onChange={updateField} />
+                  <span>
+                    <strong>Pay online now{service.from ? ` ($${service.price} starting price)` : ` ($${service.price})`}</strong>
+                    <span className="hint">
+                      Secure card payment with Stripe. Your time is held for 10 minutes while you pay.
+                      {service.from ? ' Vic settles any difference at the shop.' : ''}
+                    </span>
+                  </span>
+                </label>
+              </fieldset>
+            ) : (
+              <p className="muted">Pay at the shop. No card needed to book.</p>
+            )}
             <div className="actions">
               <button type="button" className="btn" onClick={() => setStep(1)}>
                 Back
               </button>
               <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? 'Confirming…' : 'Confirm booking'}
+                {submitting ? (wantsOnline ? 'Taking you to payment…' : 'Confirming…') : wantsOnline ? 'Continue to payment' : 'Confirm booking'}
               </button>
             </div>
           </form>

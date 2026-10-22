@@ -243,7 +243,7 @@ def test_a_scheduled_event_runs_the_sweep(monkeypatch):
 
     monkeypatch.setattr(reminders, "send_due", lambda: {"sent": 3, "errors": 0})
     event = {"version": "0", "source": "aws.events", "detail-type": "Scheduled Event", "detail": {}}
-    assert handler.lambda_handler(event, None) == {"sent": 3, "errors": 0}
+    assert handler.lambda_handler(event, None) == {"sent": 3, "errors": 0, "holdsReleased": 0}
 
 
 def test_a_web_request_still_goes_to_the_api():
@@ -256,4 +256,4 @@ def test_a_web_request_still_goes_to_the_api():
 def test_a_real_sweep_through_the_handler_with_nothing_to_do():
     from app.handler import lambda_handler
 
-    assert lambda_handler({"source": "aws.events"}, None) == {"sent": 0, "errors": 0}
+    assert lambda_handler({"source": "aws.events"}, None) == {"sent": 0, "errors": 0, "holdsReleased": 0}

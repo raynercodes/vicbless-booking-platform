@@ -5,6 +5,7 @@
     client, auth         the API, and a signed-in Vic
     sent                 catches outgoing emails
     texts                catches outgoing texts (and sets Vic's number)
+    stripe               online payment switched on, with a fake Stripe
     logged               the log lines the app wrote, as dicts
 
 Shared test data and shortcuts live in tests/helpers/ (builders, api shortcuts, constants).
@@ -17,3 +18,4 @@ from tests.fixtures.email import sent  # noqa: F401
 from tests.fixtures.logs import logged  # noqa: F401
 from tests.fixtures.settings import classic_grid  # noqa: F401
 from tests.fixtures.sms import texts  # noqa: F401
+from tests.fixtures.stripe import stripe  # noqa: F401

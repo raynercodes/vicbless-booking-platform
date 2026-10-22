@@ -18,6 +18,7 @@ backend/
     core/          config.py (settings + AWS secrets), security.py (password + session), aws.py, logs.py, errors.py, web.py (headers, CORS, error JSON)
     emailing/      email providers: resend.py (today), templates.py (the emails)
     texting/       text message providers: textbelt.py (today), templates.py (the texts)
+    payments/      Stripe: stripe.py (payment pages, refunds), webhook.py (checks a message really came from Stripe)
   tests/
     fixtures/      what pytest sets up for you: aws.py (fake AWS + the table, built from infra/template.yaml),
                    clock.py (frozen "now"), api.py (client, signed-in Vic), email.py (catches outgoing emails)
@@ -49,6 +50,7 @@ Each layer only talks to the ones below it: **routes -> services -> database -> 
 | `GET /api/health` | anyone | status, environment, deployed version |
 | `GET /api/availability?from=YYYY-MM-DD&to=YYYY-MM-DD` | anyone | `{ "2026-10-13": { "busy": [720, 755], "dayOff": false } }` (up to 31 days) |
 | `POST /api/bookings` | anyone | 201 new booking, 200 if the same request is repeated, 409 `slot_taken` / `slot_unavailable`, 422 `invalid_slot` / `validation_error`, 429 `too_many_bookings` |
+| `POST /api/stripe/webhook` | Stripe | tells us a payment was made or ran out; refused (400) unless the signature checks out |
 | `POST /api/admin/login` | Vic | `{ "password" }` gives `{ "token", "expiresIn" }`; 5 wrong tries in 15 minutes locks that address out |
 | `GET /api/admin/schedule?date=` | Vic | `{ dateKey, items, blocks }` |
 | `DELETE /api/admin/bookings/{id}` | Vic | cancels, frees the time, emails the customer if they left an email |
@@ -73,7 +75,7 @@ with `--apply`. It only adds free claims, is safe to repeat, and reports (never 
 
 ## Settings in AWS (SSM Parameter Store, `/vicbless/<env>/...`)
 `pepper`, `jwt-secret`, `admin-password-hash`, `resend-api-key` (SecureString) and `owner-email`,
-`email-from` (String). `app-version` is written by the deploy workflow.
+`email-from` (String). `stripe-secret-key` and `stripe-webhook-secret` (SecureString, see Paying online). `app-version` is written by the deploy workflow.
 Make the first three with `python backend/scripts/hash_password.py --env dev`.
 
 ## Reading the logs (CloudWatch)
@@ -100,6 +102,28 @@ delete `textbelt.py`.
 Reminders: the same Lambda runs `services/reminders.py` every 15 minutes (EventBridge schedule in `infra/template.yaml`).
 Vic chooses the times (24 and 2 hours before to start with) in Shop settings. Each one is marked on the booking as sent first,
 so it goes out once.
+
+## Paying online (Stripe)
+A customer can choose "Pay online now" on the booking form (only offered once both secrets below exist, so nothing breaks
+before then). The booking is made at once and its time is **held for 10 minutes** (`payment = pending`, `HOLD_MINUTES` in `services/payments.py`) while they pay on
+Stripe's page. Nobody is told about it yet. Stripe's signed message to `/api/stripe/webhook` then either confirms it
+(`paid`: Vic and the customer are told, and Vic sees "Paid online" on the card) or says the page ran out (the time is freed).
+Stripe will not let a payment page live under 30 minutes, so when the hold ends WE close the page on Stripe's side and free
+the time, the moment anyone looks at the times or books (and on the 15 minute sweep as a backstop). Stripe is asked first, so
+a payment that did go through is confirmed instead of lost. A booking Vic cancels after it was paid is **refunded in full first**; if the refund fails nothing
+is cancelled. (Stripe keeps its card fee on a refund.) Prices are the listed prices in dollars; a "starting at" service is
+charged its starting price, and Vic settles any difference at the shop.
+
+Setup per environment (run with `AWS_PROFILE=vicbless`). Use `sk_test_...` keys for dev and live keys for prod.
+1. Stripe dashboard > Developers > API keys: copy the **Secret key**.
+2. Developers > Webhooks > Add endpoint: URL `https://<ApiDomainName>/api/stripe/webhook` (the backend stack's API Gateway
+   address, so CloudFront and the dev preview key are not in the way), events `checkout.session.completed`,
+   `checkout.session.expired` and `checkout.session.async_payment_succeeded`. Copy its **Signing secret** (`whsec_...`).
+3. `aws ssm put-parameter --name /vicbless/<env>/stripe-secret-key --type SecureString --value 'sk_...' --overwrite`
+   and the same for `stripe-webhook-secret` with the signing secret. Within five minutes the booking page offers the choice.
+4. Try it with the test card `4242 4242 4242 4242` (any future date, any code).
+Logs to look for: `stripe_checkout_created`, `webhook_handled` (with `outcome`), `payment_confirmed`, `payment_hold_released`,
+`payment_refunded`, and `payment_orphaned` / `webhook_rejected` when something is off.
 
 ## Email
 Resend for now (`app/emailing/resend.py`). Until a domain is verified in Resend it can only send from

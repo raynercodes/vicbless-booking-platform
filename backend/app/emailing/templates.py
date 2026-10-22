@@ -88,7 +88,8 @@ def customer_confirmation(booking: Booking, owner_email: str) -> EmailMessage:
         ("Barber", "Vic"),
         ("Your code", f"<strong>{escape(booking.code)}</strong>"),
     ]
-    footer = f"Pay at the shop. Need to change something? Reply to this email or write to {CONTACT_EMAIL} and quote your code."
+    paying = "Paid online, thank you." if booking.payment == "paid" else "Pay at the shop."
+    footer = f"{paying} Need to change something? Reply to this email or write to {CONTACT_EMAIL} and quote your code."
     text = (
         f"You're booked with Vic.\n\nWhen: {when}\nService: {_service_name(booking)}\nYour code: {booking.code}\n\n{footer}\n\n"
         f"{brand_text()}"
@@ -110,6 +111,7 @@ def owner_notification(booking: Booking, owner_email: str) -> EmailMessage:
     rows = [
         ("When", escape(when)),
         ("Service", escape(_service_name(booking))),
+        ("Payment", escape(booking.payment_label)),
         ("Name", escape(booking.name)),
         ("Phone", escape(booking.phone)),
         ("Email", email_cell),
@@ -117,7 +119,7 @@ def owner_notification(booking: Booking, owner_email: str) -> EmailMessage:
         ("Code", escape(booking.code)),
     ]
     text = (
-        f"New booking\n\nWhen: {when}\nService: {_service_name(booking)}\nName: {booking.name}\n"
+        f"New booking\n\nWhen: {when}\nService: {_service_name(booking)}\nPayment: {booking.payment_label}\nName: {booking.name}\n"
         f"Phone: {booking.phone}\nEmail: {booking.email or 'none given'}\n"
         f"Notes: {booking.notes or 'none'}\nCode: {booking.code}\n\n{brand_text()}"
     )
@@ -133,6 +135,8 @@ def owner_notification(booking: Booking, owner_email: str) -> EmailMessage:
 def customer_cancellation(booking: Booking, owner_email: str) -> EmailMessage:
     when = _when(booking)
     footer = "Sorry about the change. You can book a new time anytime on the site."
+    if booking.payment == "paid":
+        footer = f"Your online payment is being refunded to your card. It can take a few days to show up. {footer}"
     return EmailMessage(
         to=booking.email,
         subject=_subject(f"Your appointment was cancelled: {when}"),
@@ -174,7 +178,8 @@ def customer_reminder(booking: Booking, owner_email: str) -> EmailMessage:
         ("Where", escape(", ".join(ADDRESS_LINES))),
         ("Your code", f"<strong>{escape(booking.code)}</strong>"),
     ]
-    footer = f"Pay at the shop. Need to change it? Write to {CONTACT_EMAIL} and quote your code."
+    paying = "Already paid online." if booking.payment == "paid" else "Pay at the shop."
+    footer = f"{paying} Need to change it? Write to {CONTACT_EMAIL} and quote your code."
     text = (
         f"A reminder of your appointment with Vic.\n\nWhen: {when}\nService: {_service_name(booking)}\n"
         f"Where: {', '.join(ADDRESS_LINES)}\nYour code: {booking.code}\n\n{footer}\n\n{brand_text()}"

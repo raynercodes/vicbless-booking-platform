@@ -12,7 +12,7 @@ import NoteText from './NoteText.jsx'
 import { describeRange } from './blocks.js'
 import { cancelBooking, getDay, removeBlock } from './adminApi.js'
 import { buildDayRows } from './schedule.js'
-import { cancelMessage, textsLabel } from './notify.js'
+import { cancelMessage, paymentLabel, textsLabel } from './notify.js'
 
 const Chevron = ({ direction }) => (
   <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
@@ -40,6 +40,7 @@ function BookingCard({ item, ctl }) {
     `Your Vicbless appointment on ${fromKey(item.dateKey).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} at ${fmtTime(item.start)}`,
   )
   const texts = textsLabel(item)
+  const pay = paymentLabel(item)
   const confirming = ctl.isCancelling(item)
   const moving = ctl.isMoving(item)
   return (
@@ -57,6 +58,11 @@ function BookingCard({ item, ctl }) {
       </div>
       <p className="admin-meta">
         {serviceName}, {item.minutes} min
+      </p>
+      <p className="admin-pay-row">
+        <span className={`pay-badge pay-${pay.state}`}>
+          <span aria-hidden="true">{pay.mark}</span> {pay.words}
+        </span>
       </p>
       {item.phone && (
         <div className="admin-phone-row">
@@ -100,9 +106,11 @@ function BookingCard({ item, ctl }) {
 
       {!confirming && !moving && (
         <div className="admin-card-actions">
-          <button type="button" className="admin-box-btn" onClick={() => ctl.askMove(item)} aria-label={`Change ${item.name}'s ${fmtTime(item.start)} booking time`}>
-            Change time
-          </button>
+          {item.payment !== 'pending' && (
+            <button type="button" className="admin-box-btn" onClick={() => ctl.askMove(item)} aria-label={`Change ${item.name}'s ${fmtTime(item.start)} booking time`}>
+              Change time
+            </button>
+          )}
           <button type="button" className="admin-box-btn admin-box-danger" onClick={() => ctl.askCancel(item)} aria-label={`Cancel ${item.name}'s ${fmtTime(item.start)} booking`}>
             Cancel
           </button>
@@ -220,8 +228,9 @@ export default function Schedule() {
       await refresh()
       setConfirm(null)
       setFlash(message)
-    } catch {
-      setActionError('That did not work. Nothing was changed. Try again.')
+    } catch (err) {
+      // A reason written for Vic (the card could not be refunded) is shown as it is.
+      setActionError(err && err.friendly ? err.message : 'That did not work. Nothing was changed. Try again.')
     } finally {
       setWorking(false)
     }

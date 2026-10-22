@@ -12,7 +12,7 @@ export class SlotTakenError extends Error {
 
 // Backend error codes whose message was written to be read by a person, so the pages show it as it is.
 // (Anything else, like a 500, gets the pages' own generic wording instead of a technical message.)
-const FRIENDLY = new Set(['validation_error', 'invalid_slot', 'too_many_bookings', 'too_many_attempts', 'unauthorized'])
+const FRIENDLY = new Set(['validation_error', 'invalid_slot', 'too_many_bookings', 'too_many_attempts', 'unauthorized', 'payment_unavailable', 'refund_failed'])
 
 // Anything the real API (or the network on the way to it) answers with an error.
 //   status   HTTP status, or 0 when the server could not be reached at all

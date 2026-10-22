@@ -197,3 +197,25 @@ describe('the shared store', () => {
     expect(getShopSettingsNow().slotMinutes[1]).toBe(30)
   })
 })
+
+describe('paying online', () => {
+  beforeEach(() => resetShopSettings())
+
+  it('is off until the API says it is set up', () => {
+    expect(DEFAULT_SHOP_SETTINGS.payOnline).not.toBe(true) // card payment is offered only once the API says it is set up
+    expect(fromApi({ ...apiBody(), payOnline: true }).payOnline).toBe(true)
+    expect(fromApi({ ...apiBody(), payOnline: 'yes' }).payOnline).toBe(false) // only a real true counts
+    expect(fromApi(apiBody())).not.toHaveProperty('payOnline') // Vic's own settings do not carry it
+  })
+
+  it('is never sent back when Vic saves his settings', () => {
+    expect(toApi({ ...DEFAULT_SHOP_SETTINGS, payOnline: true })).not.toHaveProperty('payOnline')
+  })
+
+  it('survives Vic saving his settings, which come back without it', async () => {
+    await loadShopSettings(() => ({ ...apiBody(), payOnline: true }))
+    expect(getShopSettingsNow().payOnline).toBe(true)
+    setShopSettings(fromApi(apiBody()))
+    expect(getShopSettingsNow().payOnline).toBe(true)
+  })
+})

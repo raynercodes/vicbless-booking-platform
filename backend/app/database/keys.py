@@ -3,6 +3,8 @@
     2026-10-12#CLAIM#1200                 one per taken 5 minute unit (a 45 minute booking holds nine)
     2026-10-12#BOOKING#1200#<booking id>  the booking itself
     2026-10-12#BLOCK#1200#<block id>      time Vic blocked off
+    HOLD#<until, ISO UTC>#<booking id>    an unpaid online booking whose time is held until <until> (a sweep finds the
+                                          old ones; "HOLD#" sorts after every date, so a day's range never includes it)
     SETTINGS                              Vic's settings (services, prices, appointment lengths). It has no date in front,
                                           so it never shows up in a day's range and never expires.
 Failed-login counters live under their own partition key (LOCK#...).
@@ -38,6 +40,11 @@ def claim_sk(day: date, start: int) -> str:
 
 def booking_sk(day: date, start: int, booking_id: str) -> str:
     return f"{day.isoformat()}#BOOKING#{shop.hhmm(start)}#{booking_id}"
+
+
+def hold_sk(until: str, booking_id: str) -> str:
+    """The sort key of the marker for an unpaid online booking. `until` is an ISO UTC time, so the markers sort by it."""
+    return f"HOLD#{until}#{booking_id}"
 
 
 def block_sk(day: date, start: int, block_id: str) -> str:

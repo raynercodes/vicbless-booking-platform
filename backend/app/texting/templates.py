@@ -61,6 +61,7 @@ def owner_new_booking(booking: Booking) -> str:
         "",
         f"Phone: {booking.phone}",
         f"Code: {booking.code}",
+        f"Payment: {booking.payment_label}",
     )
 
 
@@ -74,7 +75,7 @@ def customer_confirmation(booking: Booking) -> str:
         f"{_line(_service(booking), 50)} with Vic",
         f"Code: {booking.code}",
         "",
-        "Pay at the shop.",
+        "Paid online. Thank you!" if booking.payment == "paid" else "Pay at the shop.",
         EMAIL_HINT,
         "",
         OPT_OUT,
@@ -88,7 +89,7 @@ def customer_cancellation(booking: Booking) -> str:
         "",
         f"Was: {_when(booking)}",
         "",
-        "You can book a new time anytime on our site.",
+        "Your online payment will be refunded to your card." if booking.payment == "paid" else "You can book a new time anytime on our site.",
         "",
         OPT_OUT,
     )

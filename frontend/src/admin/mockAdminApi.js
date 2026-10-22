@@ -93,6 +93,9 @@ function sampleItem(dateKey, start) {
     notes: h % 4 === 0 ? NOTES[(h >>> 8) % NOTES.length] : '',
     // about half of the sample customers agreed to texts
     smsConsent: (h >>> 3) % 2 === 0,
+    // and about one in three paid online, so the badges can be seen both ways
+    payment: h % 3 === 1 ? 'paid' : 'shop',
+    amountCents: service.price * 100,
     code: 'VB-SAMPLE',
   }
 }
@@ -115,6 +118,8 @@ export async function getDay(dateKey) {
     email: b.email || '',
     notes: b.notes || '',
     smsConsent: b.smsConsent === true,
+    payment: b.payment || 'shop',
+    amountCents: b.amountCents || 0,
     code: b.code,
   }))
 
@@ -230,6 +235,8 @@ export async function moveBooking(item, { dateKey, start }) {
       email: item.email,
       notes: item.notes,
       smsConsent: item.smsConsent === true,
+      payment: item.payment || 'shop',
+      amountCents: item.amountCents || 0,
       code,
     },
   ])

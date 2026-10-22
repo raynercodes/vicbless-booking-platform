@@ -65,6 +65,9 @@ export async function createBooking(payload) {
         email: payload.email,
         notes: payload.notes,
         smsConsent: payload.smsConsent === true, // only a ticked box counts as a yes
+        payment: payload.payment === 'online' ? 'online' : 'shop',
+        // where Stripe sends the customer back to (the API only accepts the site's own address)
+        ...(payload.payment === 'online' && payload.returnTo ? { returnTo: payload.returnTo } : {}),
         // `minutes` is deliberately not sent: the API looks the length up from the service.
       },
     })

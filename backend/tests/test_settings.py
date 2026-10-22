@@ -62,7 +62,9 @@ def test_vic_reads_what_he_saved(client, auth, real_defaults):
     assert put(client, auth, body).status_code == 200
     saved = client.get("/api/admin/settings", headers=auth).json()
     assert saved["slotMinutes"]["mon"] == 30 and saved["slotMinutes"]["sat"] == 50
-    assert client.get("/api/settings").json() == saved  # customers see the same thing at once
+    public = client.get("/api/settings").json()
+    assert public.pop("payOnline") is False  # no Stripe keys here
+    assert public == saved  # customers see the same thing at once
 
 
 def test_a_damaged_stored_item_falls_back_to_the_defaults(client, real_defaults):

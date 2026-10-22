@@ -79,6 +79,23 @@ describe('createBooking', () => {
     expect(JSON.parse(calls[2].init.body).smsConsent).toBe(true)
   })
 
+  it('pays at the shop unless online was asked for, and only then sends where to come back to', async () => {
+    stub(json(201, { code: 'ABC23', dateKey: '2026-10-13', start: 660, minutes: 35, serviceId: 'haircut', staffId: 'vic' }))
+    await createBooking({ ...payload, returnTo: 'https://vicbless.com' })
+    expect(JSON.parse(calls[0].init.body)).toMatchObject({ payment: 'shop' })
+    expect(JSON.parse(calls[0].init.body)).not.toHaveProperty('returnTo')
+    await createBooking({ ...payload, payment: 'whatever' })
+    expect(JSON.parse(calls[1].init.body).payment).toBe('shop')
+    await createBooking({ ...payload, payment: 'online', returnTo: 'https://vicbless.com' })
+    expect(JSON.parse(calls[2].init.body)).toMatchObject({ payment: 'online', returnTo: 'https://vicbless.com' })
+  })
+
+  it('hands back the payment page address when the API sends one', async () => {
+    stub(json(201, { code: 'ABC23', dateKey: '2026-10-13', start: 660, minutes: 35, serviceId: 'haircut', staffId: 'vic', payment: 'pending', checkoutUrl: 'https://checkout.stripe.test/c/1' }))
+    const booking = await createBooking({ ...payload, payment: 'online' })
+    expect(booking).toMatchObject({ payment: 'pending', checkoutUrl: 'https://checkout.stripe.test/c/1' })
+  })
+
   it('treats a repeat of the same booking (200) as success', async () => {
     stub(json(200, { code: 'ABC23', dateKey: '2026-10-13', start: 660, minutes: 35, serviceId: 'haircut', staffId: 'vic' }))
     expect((await createBooking(payload)).code).toBe('ABC23')

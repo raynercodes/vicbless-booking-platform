@@ -71,6 +71,28 @@ class Booking:
     updated_at: str = ""
     # Which reminders were already sent, like "24h". Keeps a reminder from going out twice.
     reminders_sent: tuple[str, ...] = ()
+    # How it is paid. "shop": at the shop. "pending": the customer chose to pay online and has not finished yet (the time
+    # is held for a little while). "paid": paid online. `amount_cents` is the service's price when it was booked.
+    payment: str = "shop"
+    amount_cents: int = 0
+    checkout_id: str = ""  # Stripe's Checkout Session for a pending booking
+    checkout_url: str = ""  # where the customer pays it
+    hold_until: str = ""  # a pending booking's time is held until then (ISO, UTC)
+    payment_intent: str = ""  # Stripe's payment, once paid (what a refund needs)
+
+    @property
+    def price_label(self) -> str:
+        """'$65' or '$65.50'; empty for a booking made before prices were stored."""
+        if self.amount_cents <= 0:
+            return ""
+        dollars, cents = divmod(self.amount_cents, 100)
+        return f"${dollars}" if not cents else f"${dollars}.{cents:02d}"
+
+    @property
+    def payment_label(self) -> str:
+        """How it is paid, for Vic: 'Paid online ($65)', 'Pay at the shop ($65)' or 'Waiting for online payment ($65)'."""
+        base = {"paid": "Paid online", "pending": "Waiting for online payment"}.get(self.payment, "Pay at the shop")
+        return f"{base} ({self.price_label})" if self.price_label else base
 
     @property
     def claims(self) -> list[int]:
@@ -93,18 +115,24 @@ class Booking:
             "notes": self.notes,
             "code": self.code,
             "smsConsent": self.sms_consent,
+            "payment": self.payment,
+            "amountCents": self.amount_cents,
         }
 
     def public_view(self) -> dict:
         """What the customer gets back. The internal id is left out."""
-        return {
+        view = {
             "code": self.code,
             "dateKey": self.day.isoformat(),
             "start": self.start,
             "minutes": self.minutes,
             "serviceId": self.service_id,
             "staffId": shop.STAFF_ID,
+            "payment": self.payment,
         }
+        if self.payment == "pending" and self.checkout_url:
+            view["checkoutUrl"] = self.checkout_url  # the page where they pay; the site sends them there
+        return view
 
 
 @dataclass(frozen=True)

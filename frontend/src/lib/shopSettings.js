@@ -63,7 +63,9 @@ export function fromApi(raw) {
     if (!Array.isArray(raw.reminderHours) || !raw.reminderHours.every((h) => REMINDER_CHOICES.includes(h))) return null
     reminderHours = cleanHours(raw.reminderHours)
   }
-  return { services, slotMinutes, reminderHours }
+  // Whether customers can pay by card. Only the customer-facing answer says so (Vic's own settings do not).
+  const online = raw.payOnline === undefined ? {} : { payOnline: raw.payOnline === true }
+  return { services, slotMinutes, reminderHours, ...online }
 }
 
 // What the screens hold -> what the API wants. A service without an id (a new one) is sent without it.
@@ -180,7 +182,8 @@ export const subscribeShopSettings = (fn) => {
 
 // Puts new settings into the store (after loading them, or after Vic saved) and tells every screen.
 export function setShopSettings(settings) {
-  current = settings
+  // Vic's saved settings come back without the card-payment flag, so the one already known is kept
+  current = settings.payOnline === undefined ? { ...settings, payOnline: current.payOnline === true } : settings
   for (const fn of listeners) fn()
 }
 

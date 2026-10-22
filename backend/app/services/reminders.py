@@ -38,6 +38,8 @@ def _updated(booking: Booking) -> datetime:
 
 def _handle(booking: Booking, hours_list: tuple[int, ...], now: datetime) -> bool:
     """Sends the reminder this booking is due, if any. Returns True when one was sent."""
+    if booking.payment == "pending":
+        return False  # still waiting for the customer to pay online: it is not a real appointment yet
     starts = shop.starts_at(booking.day, booking.start).astimezone(timezone.utc)
     if now >= starts:
         return False

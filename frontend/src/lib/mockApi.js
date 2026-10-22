@@ -81,6 +81,7 @@ export async function getShopSettings() {
     services: settings.services.map((s) => ({ id: s.id, name: s.name, price: s.price, from: s.from, note: s.note })),
     slotMinutes: Object.fromEntries(DAY_KEYS.map((key, day) => [key, settings.slotMinutes[day]])),
     reminderHours: settings.reminderHours,
+    payOnline: true, // the preview shows the card option; "paying" in it simply marks the booking paid
   }
 }
 
@@ -93,7 +94,10 @@ export async function createBooking(payload) {
   const code = 'VB-' + hash(JSON.stringify(payload) + Date.now()).toString(36).toUpperCase().slice(0, 5)
   // The service's name is kept with the booking, like the real backend does, so a later rename does not change it.
   const service = readShopSettings().services.find((s) => s.id === payload.serviceId)
-  const booking = { ...payload, minutes: slot, serviceName: service ? service.name : '', code }
+  // Paying online is pretended here: the booking is simply marked paid. The real API sends the customer to Stripe.
+  const payment = payload.payment === 'online' ? 'paid' : 'shop'
+  const amountCents = service ? service.price * 100 : 0
+  const booking = { ...payload, minutes: slot, serviceName: service ? service.name : '', code, payment, amountCents }
   writeBookings([...readBookings(), booking])
   return booking
 }

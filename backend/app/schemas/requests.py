@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
 
@@ -135,6 +136,8 @@ class BookingIn(BaseModel):
     email: str | None = None
     notes: str | None = None
     smsConsent: StrictBool = False  # ticked "text me" (texts to a customer go out only when this is true)
+    payment: Literal["shop", "online"] = "shop"  # pay at the shop, or online (Stripe) when it is set up
+    returnTo: str | None = Field(default=None, max_length=200)  # the site's address, where Stripe sends them back to
 
     @field_validator("staffId")
     @classmethod
